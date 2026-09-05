@@ -1,0 +1,440 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* ────────────────────────────────────────────────────────
+   DESIGN TOKENS — Color Mode Variables
+
+   :root defines the fixed dark palette used everywhere by default —
+   including the marketing/login/signup pages, which are NOT part of
+   the dashboard's theme system and must always render dark regardless
+   of what color mode the user picked for their dashboard.
+
+   The light/custom blocks below key off `[data-color-mode]` (any
+   element with that attribute, not `html[data-color-mode]`) because
+   DashboardLayout sets it on its own root div — scoping the override
+   to the dashboard subtree via normal CSS inheritance. Everything
+   outside that subtree keeps resolving these vars from :root.
+   ──────────────────────────────────────────────────────── */
+
+/* Default: dark — deep navy */
+:root {
+  /* Tells the browser to render native form chrome (date/color pickers,
+     checkboxes, scrollbars) in dark style so they don't look like a
+     light-mode popup glued onto a dark app. */
+  color-scheme: dark;
+
+  --bg-base:     #05070d;   /* page background                   */
+  --bg-page:     #07090f;   /* root app wrapper                  */
+  --bg-panel:    #0a0d14;   /* sidebar, left panels              */
+  --bg-card:     #0b0e1a;   /* card / section backgrounds        */
+  --bg-drop:     #0d1117;   /* dropdowns, popovers               */
+  --bg-raised:   #10141d;   /* workspace switcher, raised items  */
+  --bg-surface:  rgba(8, 11, 24, 0.56);  /* glass card surface  */
+  --bg-input:    #000000;   /* inputs, code blocks               */
+  --bg-hover:    rgba(255, 255, 255, 0.04);
+  --bg-chip:     rgba(0, 0, 0, 0.40);
+
+  --text-primary:   #ffffff;
+  --text-secondary: #9ca3af;
+  --text-muted:     #6b7280;
+  --text-faint:     #374151;
+
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong:  rgba(255, 255, 255, 0.18);
+
+  --accent:         #3b82f6;
+  --accent-hover:   #2563eb;
+  --accent-muted:   rgba(59, 130, 246, 0.15);
+
+  --glass-bg:       rgba(8, 11, 24, 0.56);
+  --glass-filter:   blur(18px) saturate(105%);
+  --glass-border:   rgba(255, 255, 255, 0.10);
+  --glass-rim:      rgba(255, 255, 255, 0.14);
+
+  --shadow-close:   rgba(0, 0, 0, 0.32);
+  --shadow-far:     rgba(0, 0, 0, 0.48);
+
+  --scrollbar-thumb: #142849;
+  --scrollbar-hover: #2f68c4;
+
+  --dropdown-bg:    rgba(8, 11, 20, 0.92);
+  --selection-bg:   rgba(59, 130, 246, 0.25);
+  --selection-text: #bfdbfe;
+}
+
+/* Light mode — soft slate */
+[data-color-mode="light"] {
+  color-scheme: light;
+
+  --bg-base:     #f0f4f8;
+  --bg-page:     #f1f5f9;
+  --bg-panel:    #e4eaf2;
+  --bg-card:     #eaeff6;
+  --bg-drop:     #f5f7fa;
+  --bg-raised:   #f0f4f8;
+  --bg-surface:  rgba(255, 255, 255, 0.75);
+  --bg-input:    #ffffff;
+  --bg-hover:    rgba(0, 0, 0, 0.04);
+  --bg-chip:     rgba(0, 0, 0, 0.06);
+
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #64748b;
+  --text-faint:     #94a3b8;
+
+  --border-subtle:  rgba(0, 0, 0, 0.06);
+  --border-default: rgba(0, 0, 0, 0.10);
+  --border-strong:  rgba(0, 0, 0, 0.20);
+
+  /* Lighter resting blue (blue-500) so solid-fill buttons don't read as
+     heavy/muddy on a light background; hover deepens to the old blue-600. */
+  --accent:         #3b82f6;
+  --accent-hover:   #2563eb;
+  --accent-muted:   rgba(59, 130, 246, 0.12);
+
+  /* Lower opacity + stronger saturate so the animated background actually
+     shows/refracts through the card (glassmorphism needs ~15-30% fill,
+     75% read as a flat opaque panel). Shadows deepened for elevation
+     since light surfaces have less inherent depth cue than dark ones. */
+  --glass-bg:       rgba(255, 255, 255, 0.46);
+  --glass-filter:   blur(20px) saturate(180%);
+  --glass-border:   rgba(0, 0, 0, 0.12);
+  --glass-rim:      rgba(255, 255, 255, 0.95);
+
+  --shadow-close:   rgba(30, 41, 59, 0.10);
+  --shadow-far:     rgba(30, 41, 59, 0.20);
+
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-hover: #94a3b8;
+
+  --dropdown-bg:    rgba(255, 255, 255, 0.96);
+  --selection-bg:   rgba(59, 130, 246, 0.20);
+  --selection-text: #1e3a8a;
+}
+
+/* Custom mode — Sunset (light warm pastel + orange accent) */
+[data-color-mode="custom"] {
+  color-scheme: light;
+
+  --bg-base:     #fdf8f1;   /* warm cream off-white                */
+  --bg-page:     #fef9f4;
+  --bg-panel:    #f7f0e6;
+  --bg-card:     #f3ebe0;
+  --bg-drop:     #fdf6ee;
+  --bg-raised:   #ede3d5;
+  --bg-surface:  rgba(255, 248, 238, 0.80);
+  --bg-input:    #ffffff;
+  --bg-hover:    rgba(249, 115, 22, 0.07);
+  --bg-chip:     rgba(249, 115, 22, 0.10);
+
+  --text-primary:   #1c0f05;   /* deep warm brown                  */
+  --text-secondary: #6b4525;
+  --text-muted:     #9a7050;
+  --text-faint:     #c4a882;
+
+  --border-subtle:  rgba(180, 90, 30, 0.10);
+  --border-default: rgba(180, 90, 30, 0.18);
+  --border-strong:  rgba(180, 90, 30, 0.30);
+
+  --accent:         #f97316;
+  --accent-hover:   #ea6c0a;
+  --accent-muted:   rgba(249, 115, 22, 0.15);
+
+  --glass-bg:       rgba(255, 248, 238, 0.48);
+  --glass-filter:   blur(20px) saturate(170%);
+  --glass-border:   rgba(249, 115, 22, 0.22);
+  --glass-rim:      rgba(255, 255, 255, 0.90);
+
+  --shadow-close:   rgba(160, 80, 20, 0.14);
+  --shadow-far:     rgba(160, 80, 20, 0.26);
+
+  --scrollbar-thumb: #e8c4a0;
+  --scrollbar-hover: #f97316;
+
+  --dropdown-bg:    rgba(255, 248, 240, 0.96);
+  --selection-bg:   rgba(249, 115, 22, 0.20);
+  --selection-text: #7c2d12;
+}
+
+/* ────────────────────────────────────────────────────────
+   BASE STYLES
+   ──────────────────────────────────────────────────────── */
+@layer base {
+  html, body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+  }
+
+  ::selection {
+    background-color: var(--selection-bg);
+    color: var(--selection-text);
+  }
+
+  @supports not selector(*::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+  }
+  *::-webkit-scrollbar        { width: 5px; height: 5px; }
+  *::-webkit-scrollbar-track  { background: transparent; }
+  *::-webkit-scrollbar-thumb  { background: var(--scrollbar-thumb); border-radius: 9999px; }
+  *::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+  *::-webkit-scrollbar-corner { background: transparent; }
+
+  button { cursor: pointer; }
+
+  input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; width: 100%; }
+  input[type="range"]:focus { outline: none; }
+  input[type="range"]::-webkit-slider-runnable-track { background: var(--border-subtle); border-radius: 9999px; height: 4px; border: 1px solid var(--border-subtle); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -6px; background: var(--accent); height: 16px; width: 16px; border-radius: 9999px; border: 2px solid rgba(255, 255, 255, 0.9); transition: all 0.15s ease; }
+  input[type="range"]:hover::-webkit-slider-thumb  { transform: scale(1.15); }
+  input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.05); background: var(--accent-hover); }
+  input[type="range"]::-moz-range-track { background: var(--border-subtle); border-radius: 9999px; height: 4px; }
+  input[type="range"]::-moz-range-thumb { background: var(--accent); height: 16px; width: 16px; border-radius: 9999px; border: 2px solid rgba(255, 255, 255, 0.9); }
+  input[type="range"]::-moz-range-progress { background: var(--accent); border-radius: 9999px; height: 4px; }
+}
+
+/* ────────────────────────────────────────────────────────
+   GLOBAL UTILITY OVERRIDES
+   These redefine key Tailwind utility classes to use CSS
+   custom properties so all three color modes take effect
+   automatically — no conditional selectors needed.
+
+   In dark mode the CSS vars resolve to the exact same
+   values as Tailwind's defaults, so nothing visually
+   changes. In light/custom mode the vars resolve to
+   the new palette and every component inherits the theme.
+   ──────────────────────────────────────────────────────── */
+
+/* Text colors — neutrals only (accent/status colors intentionally unchanged) */
+.text-white           { color: var(--text-primary)   !important; }
+.text-gray-50         { color: var(--text-primary)   !important; }
+.text-gray-100        { color: var(--text-primary)   !important; }
+.text-gray-200        { color: var(--text-secondary) !important; }
+.text-gray-300        { color: var(--text-secondary) !important; }
+.text-gray-400        { color: var(--text-secondary) !important; }
+.text-gray-500        { color: var(--text-muted)     !important; }
+.text-gray-600        { color: var(--text-muted)     !important; }
+.text-gray-700        { color: var(--text-faint)     !important; }
+.text-gray-800        { color: var(--text-faint)     !important; }
+.text-slate-300       { color: var(--text-secondary) !important; }
+.text-slate-400       { color: var(--text-secondary) !important; }
+.text-slate-500       { color: var(--text-muted)     !important; }
+.text-slate-600       { color: var(--text-muted)     !important; }
+.text-slate-700       { color: var(--text-faint)     !important; }
+.text-zinc-400        { color: var(--text-secondary) !important; }
+.text-zinc-500        { color: var(--text-muted)     !important; }
+
+/* Background colors — dark hex values → CSS vars */
+.bg-black             { background-color: var(--bg-input)  !important; }
+.bg-zinc-950          { background-color: var(--bg-card)   !important; }
+.bg-zinc-900          { background-color: var(--bg-raised) !important; }
+.bg-zinc-800          { background-color: var(--bg-raised) !important; }
+.bg-zinc-700          { background-color: var(--border-strong) !important; }
+.bg-\[\#05070d\]      { background-color: var(--bg-base)   !important; }
+.bg-\[\#07090f\]      { background-color: var(--bg-page)   !important; }
+.bg-\[\#05070a\]      { background-color: var(--bg-base)   !important; }
+.bg-\[\#080b18\]      { background-color: var(--bg-base)   !important; }
+.bg-\[\#0a0d14\]      { background-color: var(--bg-panel)  !important; }
+.bg-\[\#0b0e1a\]      { background-color: var(--bg-card)   !important; }
+.bg-\[\#0c0f1a\]      { background-color: var(--bg-card)   !important; }
+.bg-\[\#0d1117\]      { background-color: var(--bg-drop)   !important; }
+.bg-\[\#0d1017\]      { background-color: var(--bg-drop)   !important; }
+.bg-\[\#06090f\]      { background-color: var(--bg-base)   !important; }
+.bg-\[\#10141d\]      { background-color: var(--bg-raised) !important; }
+.bg-\[\#080b24\]      { background-color: var(--bg-panel)  !important; }
+.bg-\[\#0b0e1a\]\/80  { background-color: color-mix(in srgb, var(--bg-card) 80%, transparent) !important; }
+
+/* Semi-transparent dark overlays */
+.bg-black\/20         { background-color: color-mix(in srgb, var(--bg-input) 20%, transparent) !important; }
+.bg-black\/30         { background-color: color-mix(in srgb, var(--bg-input) 30%, transparent) !important; }
+.bg-black\/40         { background-color: color-mix(in srgb, var(--bg-input) 40%, transparent) !important; }
+.bg-black\/50         { background-color: color-mix(in srgb, var(--bg-input) 50%, transparent) !important; }
+.bg-black\/60         { background-color: color-mix(in srgb, var(--bg-input) 60%, transparent) !important; }
+.bg-black\/70         { background-color: color-mix(in srgb, var(--bg-input) 70%, transparent) !important; }
+.bg-black\/80         { background-color: color-mix(in srgb, var(--bg-input) 80%, transparent) !important; }
+.bg-black\/95         { background-color: color-mix(in srgb, var(--bg-input) 95%, transparent) !important; }
+.bg-\[rgba\(16\,20\,29\,0\.60\)\]  { background-color: var(--dropdown-bg) !important; }
+.bg-\[rgba\(16\,20\,29\,0\.55\)\]  { background-color: var(--dropdown-bg) !important; }
+.bg-white\/2          { background-color: var(--bg-hover) !important; }
+.bg-white\/3          { background-color: var(--bg-hover) !important; }
+.bg-white\/4          { background-color: var(--bg-hover) !important; }
+.bg-white\/5          { background-color: var(--bg-hover) !important; }
+.bg-white\/6          { background-color: var(--bg-hover) !important; }
+.bg-white\/9          { background-color: var(--bg-hover) !important; }
+
+/* Neutral grays used for "default/system" tags — not a semantic status color */
+.bg-slate-500\/10     { background-color: var(--bg-hover)     !important; }
+.bg-gray-500\/10      { background-color: var(--bg-hover)     !important; }
+.text-slate-800       { color: var(--text-faint)              !important; }
+
+/* Border colors — white transparency variants */
+.border-white\/3      { border-color: var(--border-subtle)  !important; }
+.border-white\/4      { border-color: var(--border-subtle)  !important; }
+.border-white\/5      { border-color: var(--border-subtle)  !important; }
+.border-white\/6      { border-color: var(--border-subtle)  !important; }
+.border-white\/8      { border-color: var(--border-subtle)  !important; }
+.border-white\/9      { border-color: var(--border-subtle)  !important; }
+.border-white\/10     { border-color: var(--border-default) !important; }
+.border-white\/12     { border-color: var(--border-default) !important; }
+.border-white\/15     { border-color: var(--border-default) !important; }
+.border-white\/18     { border-color: var(--border-strong)  !important; }
+.border-white\/20     { border-color: var(--border-strong)  !important; }
+.border-slate-500\/20 { border-color: var(--border-default) !important; }
+.border-gray-500\/20  { border-color: var(--border-default) !important; }
+
+/* Hover background/border utilities — the base override list didn't extend to :hover/group-hover */
+.hover\:bg-white\/2:hover  { background-color: var(--bg-hover) !important; }
+.hover\:bg-white\/4:hover  { background-color: var(--bg-hover) !important; }
+.hover\:bg-white\/5:hover  { background-color: var(--bg-hover) !important; }
+.hover\:bg-white\/6:hover  { background-color: var(--bg-hover) !important; }
+.hover\:bg-white\/8:hover  { background-color: var(--bg-hover) !important; }
+.group:hover .group-hover\:bg-white\/4  { background-color: var(--bg-hover) !important; }
+.hover\:border-white\/10:hover { border-color: var(--border-default) !important; }
+.hover\:border-white\/12:hover { border-color: var(--border-default) !important; }
+.hover\:border-white\/15:hover { border-color: var(--border-default) !important; }
+.hover\:border-white\/18:hover { border-color: var(--border-strong)  !important; }
+
+/* Text hover/group-hover — text-white/gray/slate/zinc only had bare-state coverage before */
+.hover\:text-white:hover  { color: var(--text-primary)   !important; }
+.hover\:text-gray-300:hover  { color: var(--text-secondary) !important; }
+.hover\:text-gray-400:hover  { color: var(--text-secondary) !important; }
+.hover\:text-slate-400:hover { color: var(--text-secondary) !important; }
+.group:hover .group-hover\:text-white   { color: var(--text-primary)   !important; }
+.group:hover .group-hover\:text-slate-400 { color: var(--text-secondary) !important; }
+.group:hover .group-hover\:opacity-100  { opacity: 1 !important; }
+
+/* Placeholder text — Tailwind's placeholder: variant targets ::placeholder directly,
+   the base-layer `input::placeholder` rule loses to it on specificity without !important */
+.placeholder\:text-slate-700::placeholder,
+.placeholder\:text-slate-600::placeholder,
+.placeholder\:text-gray-700::placeholder,
+.placeholder-slate-600::placeholder,
+.placeholder-gray-700::placeholder { color: var(--text-faint) !important; }
+
+/* Divide (internal borders) */
+.divide-white\/5 > * + * { border-color: var(--border-subtle)  !important; }
+
+/* Input and code blocks — !important so Tailwind bg-[] classes don't override */
+input, textarea, select {
+  background-color: var(--bg-input)    !important;
+  color:            var(--text-primary) !important;
+  border-color:     var(--border-default);
+}
+
+/* Placeholder text */
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+
+/* Hover backgrounds not covered by class overrides */
+.bg-white\/8  { background-color: var(--bg-hover) !important; }
+.bg-white\/10 { background-color: var(--bg-hover) !important; }
+
+.hover\:bg-white\/8:hover  { background-color: var(--bg-hover) !important; }
+.hover\:bg-white\/10:hover { background-color: var(--bg-hover) !important; }
+
+/* Focus states */
+.focus\:border-blue-500:focus { border-color: var(--accent) !important; }
+
+/* ────────────────────────────────────────────────────────
+   ACCENT — every "this is the brand action color" class routes
+   through var(--accent)/var(--accent-hover)/var(--accent-muted)
+   UNCONDITIONALLY, in all three modes. Previously this only
+   applied in custom (sunset) mode, with light mode separately
+   re-forcing blue-* back to a hardcoded hex — two sources of
+   truth that could drift. Now there's one: whatever --accent
+   resolves to per mode is what every one of these renders as.
+   ──────────────────────────────────────────────────────── */
+.bg-blue-400          { background-color: var(--accent)      !important; }
+.bg-blue-500          { background-color: var(--accent)      !important; }
+.bg-blue-600          { background-color: var(--accent)      !important; }
+.hover\:bg-blue-500:hover { background-color: var(--accent-hover) !important; }
+.hover\:bg-blue-600:hover { background-color: var(--accent-hover) !important; }
+.border-blue-400      { border-color: var(--accent)          !important; }
+.border-blue-500      { border-color: var(--accent)          !important; }
+.text-blue-300        { color: var(--accent)                 !important; }
+.text-blue-400        { color: var(--accent)                 !important; }
+.text-blue-500        { color: var(--accent)                 !important; }
+.hover\:text-blue-300:hover { color: var(--accent-hover)      !important; }
+.hover\:text-blue-400:hover { color: var(--accent-hover)      !important; }
+.group:hover .group-hover\:text-blue-400 { color: var(--accent-hover) !important; }
+
+/* Every bg-blue-{400,500,600,700,800,900}/{opacity} variant found in use → var(--accent-muted) */
+.bg-blue-500\/4,
+.bg-blue-500\/5,
+.bg-blue-500\/6,
+.bg-blue-500\/8,
+.bg-blue-500\/10,
+.bg-blue-500\/12,
+.bg-blue-500\/15,
+.bg-blue-500\/20,
+.bg-blue-600\/10,
+.bg-blue-600\/15,
+.bg-blue-600\/20,
+.bg-blue-700\/6,
+.bg-blue-700\/15,
+.bg-blue-900\/10   { background-color: var(--accent-muted) !important; }
+
+.hover\:bg-blue-500\/4:hover,
+.hover\:bg-blue-500\/15:hover,
+.hover\:bg-blue-600\/15:hover,
+.hover\:bg-blue-600\/25:hover,
+.hover\:bg-blue-600\/30:hover,
+.hover\:bg-blue-600\/40:hover,
+.hover\:bg-blue-700\/15:hover { background-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
+
+.disabled\:bg-blue-800\/40:disabled,
+.disabled\:bg-blue-800\/50:disabled { background-color: color-mix(in srgb, var(--accent) 35%, transparent) !important; }
+
+/* Every border-blue-{400,500}/{opacity} variant → var(--accent), consistent alpha via color-mix */
+.border-blue-400\/40,
+.border-blue-500\/10,
+.border-blue-500\/12,
+.border-blue-500\/15,
+.border-blue-500\/20,
+.border-blue-500\/25,
+.border-blue-500\/30,
+.border-blue-500\/40,
+.border-blue-500\/50  { border-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
+.hover\:border-blue-500\/30:hover,
+.hover\:border-blue-500\/40:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent) !important; }
+
+/* Shadows/rings — arbitrary-opacity variants of the same "accent glow" pattern */
+.shadow-blue-500\/10,
+.shadow-blue-600\/20,
+.shadow-blue-600\/25,
+.shadow-blue-600\/40,
+.shadow-blue-600\/50  { --tw-shadow-color: color-mix(in srgb, var(--accent) 30%, transparent) !important; }
+.ring-blue-500\/20    { --tw-ring-color: color-mix(in srgb, var(--accent) 20%, transparent) !important; }
+
+/* Reusable accent-colored glow — replaces one-off hardcoded blue drop-shadow/box-shadow
+   utilities so hover glows follow var(--accent) in every color mode */
+.hover\:drop-shadow-accent:hover           { filter: drop-shadow(0 0 10px var(--accent)); }
+.group:hover .group-hover\:drop-shadow-accent { filter: drop-shadow(0 0 10px var(--accent)); }
+.shadow-accent-glow                        { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent) !important; }
+.border-accent-glow                        { border-color: var(--accent) !important; box-shadow: 0 0 15px color-mix(in srgb, var(--accent) 25%, transparent) !important; }
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer { animation: none; }
+}

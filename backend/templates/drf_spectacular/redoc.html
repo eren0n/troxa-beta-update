@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Troxa API Reference</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-base:        #05070d;
+      --bg-page:        #07090f;
+      --bg-panel:       #0a0d14;
+      --bg-card:        #0b0e1a;
+      --bg-raised:      #10141d;
+      --bg-dropdown:    rgba(8, 11, 20, 0.96);
+      --text-primary:   #ffffff;
+      --text-secondary: #9ca3af;
+      --text-muted:     #6b7280;
+      --border-subtle:  rgba(255, 255, 255, 0.05);
+      --border-default: rgba(255, 255, 255, 0.10);
+      --border-strong:  rgba(255, 255, 255, 0.18);
+      --accent:         #3b82f6;
+      --accent-hover:   #2563eb;
+      --accent-muted:   rgba(59, 130, 246, 0.15);
+      --glass-bg:       rgba(8, 11, 24, 0.56);
+      --glass-filter:   blur(18px) saturate(105%);
+      --glass-border:   rgba(255, 255, 255, 0.10);
+      --glass-rim:      rgba(255, 255, 255, 0.14);
+      --shadow-close:   rgba(0, 0, 0, 0.32);
+      --shadow-far:     rgba(0, 0, 0, 0.48);
+      --scrollbar-thumb: #142849;
+      --scrollbar-hover: #2f68c4;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --error:   #f87171;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-base);
+      font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      color: var(--text-primary);
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+    /* ── Topbar ── */
+    #topbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 52px;
+      background: var(--bg-dropdown);
+      backdrop-filter: var(--glass-filter);
+      -webkit-backdrop-filter: var(--glass-filter);
+      border-bottom: 1px solid var(--border-subtle);
+      box-shadow: 0 1px 0 var(--glass-rim);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 10px;
+      z-index: 9999;
+    }
+
+    .tb-logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      text-decoration: none;
+    }
+
+    .tb-logomark {
+      width: 26px;
+      height: 26px;
+      background: linear-gradient(135deg, var(--accent), #818cf8);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .tb-logomark svg { width: 14px; height: 14px; }
+
+    .tb-wordmark {
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--text-primary);
+      letter-spacing: -0.4px;
+    }
+
+    .tb-sep {
+      width: 1px;
+      height: 18px;
+      background: var(--border-default);
+      margin: 0 2px;
+    }
+
+    .tb-badge {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      color: var(--accent);
+      background: var(--accent-muted);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 5px;
+      padding: 2px 7px;
+    }
+
+    .tb-spacer { flex: 1; }
+
+    .tb-link {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 5px 10px;
+      border-radius: 7px;
+      transition: color 0.12s, background 0.12s;
+    }
+    .tb-link:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+
+    .tb-cta {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      text-decoration: none;
+      padding: 5px 13px;
+      background: var(--accent);
+      border-radius: 7px;
+      transition: background 0.12s;
+    }
+    .tb-cta:hover { background: var(--accent-hover); }
+
+    /* ── ReDoc root offset ── */
+    #redoc-container { padding-top: 52px; }
+
+    /* ── ReDoc DOM overrides ── */
+
+    /* Body / page */
+    .redoc-wrap,
+    [class*="ApiContentWrap"],
+    [class*="middle-panel"] {
+      background: var(--bg-base) !important;
+    }
+
+    /* Sidebar */
+    [class*="SideContent"],
+    [class*="SidebarContent"],
+    [class*="Sidebar"],
+    menu {
+      background: var(--bg-panel) !important;
+      border-right: 1px solid var(--border-subtle) !important;
+    }
+
+    /* Sidebar search */
+    [class*="SearchInput"],
+    input[type="search"] {
+      background: var(--bg-raised) !important;
+      border: 1px solid var(--border-default) !important;
+      border-radius: 8px !important;
+      color: var(--text-primary) !important;
+      font-family: 'Inter', sans-serif !important;
+    }
+    input[type="search"]::placeholder { color: var(--text-muted) !important; }
+
+    /* Sidebar items */
+    [class*="MenuItemLabel"] {
+      color: var(--text-secondary) !important;
+      font-family: 'Inter', sans-serif !important;
+      font-size: 13px !important;
+      font-weight: 500 !important;
+    }
+    [class*="MenuItemLabel"]:hover { color: var(--text-primary) !important; }
+
+    [class*="MenuItem"][class*="-active"] > label,
+    [class*="MenuItem"][class*="-active"] > [class*="MenuItemLabel"] {
+      color: var(--accent) !important;
+      font-weight: 600 !important;
+    }
+
+    /* Sidebar group titles */
+    [class*="OperationBadge"],
+    [class*="ApiHeader"],
+    li[data-item-id] > label {
+      font-family: 'Inter', sans-serif !important;
+    }
+
+    /* Right panel (code examples) */
+    [class*="right-panel"],
+    [class*="RightPanelWrap"],
+    [class*="RightPanel"] {
+      background: var(--bg-card) !important;
+    }
+
+    /* Schema tables */
+    [class*="SchemaTable"],
+    [class*="ParamsTable"],
+    table {
+      border-color: var(--border-subtle) !important;
+    }
+
+    /* Code blocks */
+    code, pre, [class*="CodeBlock"], [class*="SampleControls"] {
+      font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace !important;
+      font-size: 12.5px !important;
+    }
+
+    /* H1/H2/H3 */
+    h1, h2, h3, h4 {
+      font-family: 'Inter', sans-serif !important;
+      color: var(--text-primary) !important;
+      font-weight: 800 !important;
+    }
+    p, li { color: var(--text-secondary) !important; }
+
+    /* Dividers */
+    [class*="SidebarDivider"],
+    hr { background: var(--border-subtle) !important; border: none !important; height: 1px !important; }
+
+    /* Selection */
+    ::selection { background: rgba(59,130,246,0.25); color: #bfdbfe; }
+  </style>
+</head>
+<body>
+
+  <nav id="topbar">
+    <a href="https://troxa.ai" class="tb-logo">
+      <div class="tb-logomark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+          <polyline points="2 17 12 22 22 17"/>
+          <polyline points="2 12 12 17 22 12"/>
+        </svg>
+      </div>
+      <span class="tb-wordmark">Troxa</span>
+    </a>
+    <div class="tb-sep"></div>
+    <span class="tb-badge">API v1.0</span>
+    <div class="tb-spacer"></div>
+    <a href="https://troxa.ai/dashboard/team" class="tb-link">Get API Key</a>
+    <a href="{{ schema_url }}" class="tb-link" download>OpenAPI Schema ↓</a>
+    <a href="https://troxa.ai/dashboard" class="tb-cta">Dashboard →</a>
+  </nav>
+
+  <div id="redoc-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
+  <script>
+    Redoc.init('{{ schema_url }}', {
+      scrollYOffset: 52,
+      hideDownloadButton: false,
+      expandResponses: '200,201',
+      pathInMiddlePanel: true,
+      nativeScrollbars: false,
+      disableSearch: false,
+      theme: {
+        spacing: { unit: 4, sectionHorizontal: 28, sectionVertical: 20 },
+        colors: {
+          primary: { main: '#3b82f6' },
+          success: { main: '#34d399' },
+          warning: { main: '#fbbf24' },
+          error:   { main: '#f87171' },
+          info:    { main: '#3b82f6' },
+          text: {
+            primary:   '#ffffff',
+            secondary: '#9ca3af',
+          },
+          border: {
+            dark:  'rgba(255,255,255,0.10)',
+            light: 'rgba(255,255,255,0.05)',
+          },
+          responses: {
+            success:  { color: '#34d399', backgroundColor: 'rgba(52,211,153,0.08)' },
+            redirect: { color: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)' },
+            info:     { color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)' },
+            error:    { color: '#f87171', backgroundColor: 'rgba(248,113,113,0.08)' },
+          },
+          http: {
+            get:     '#34d399',
+            post:    '#3b82f6',
+            put:     '#fbbf24',
+            options: '#9ca3af',
+            patch:   '#a78bfa',
+            delete:  '#f87171',
+            basic:   '#9ca3af',
+            link:    '#3b82f6',
+            head:    '#9ca3af',
+          },
+          tonalOffset: 0.2,
+        },
+        schema: {
+          linesColor:       'rgba(255,255,255,0.07)',
+          typeNameColor:    '#3b82f6',
+          typeTitleColor:   '#e2e8f0',
+          requireLabelColor:'#f87171',
+          labelsTextSize:   '11px',
+          nestingSpacing:   '1em',
+          nestedBackground: 'rgba(255,255,255,0.02)',
+          arrow: { size: '1em', color: 'rgba(255,255,255,0.25)' },
+        },
+        typography: {
+          fontSize:          '14px',
+          lineHeight:        '1.65',
+          fontWeightRegular: '400',
+          fontWeightBold:    '700',
+          fontWeightLight:   '300',
+          fontFamily:        "'Inter', ui-sans-serif, system-ui, sans-serif",
+          smoothing:         'antialiased',
+          optimizeSpeed:     true,
+          headings: {
+            fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif",
+            fontWeight: '800',
+            lineHeight: '1.3',
+          },
+          code: {
+            fontSize:        '13px',
+            fontFamily:      "'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
+            lineHeight:      '1.55',
+            fontWeight:      '400',
+            color:           '#e2e8f0',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            wrap:            false,
+          },
+          links: {
+            color:   '#3b82f6',
+            visited: '#818cf8',
+            hover:   '#93c5fd',
+          },
+        },
+        sidebar: {
+          width:           '264px',
+          backgroundColor: '#0a0d14',
+          textColor:       '#9ca3af',
+          activeTextColor: '#3b82f6',
+          groupItems: {
+            activeBackgroundColor: 'rgba(59,130,246,0.08)',
+            activeTextColor:       '#3b82f6',
+            textTransform:         'uppercase',
+            fontSize:              '11px',
+            fontWeight:            '700',
+          },
+          level1Items: {
+            activeBackgroundColor: 'rgba(59,130,246,0.08)',
+            activeTextColor:       '#3b82f6',
+          },
+          arrow: { size: '1.1em', color: 'rgba(255,255,255,0.2)' },
+        },
+        rightPanel: {
+          backgroundColor: '#0b0e1a',
+          width:           '38%',
+          textColor:       '#e2e8f0',
+        },
+        fab: {
+          backgroundColor: '#3b82f6',
+          color:           '#fff',
+        },
+      },
+    }, document.getElementById('redoc-container'));
+  </script>
+</body>
+</html>

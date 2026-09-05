@@ -1,0 +1,53 @@
+# Node
+node_modules/
+dist/
+.env
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Media uploads
+media/
+
+# Collected static files
+backend/staticfiles/
+
+# Database dumps
+db_dump.json
+db_backups/
+
+# Local backups
+backups/
+
+# Meta Datasets
+dataset_2026-07-03 (4).jsonl
+dataset_readable.json
+
+# LORA Guide 
+LORA_GUIDE.md

@@ -1,0 +1,35 @@
+from django.urls import path
+from .views import (
+    GenerateView, JobsView, JobDetailView, GalleryView,
+    CreativeDetailView, CreativeLogoView, MakeVideoView,
+    VideoJobsView, VideoJobDetailView,
+    LogoPlacementsView, LogoEditorSaveView, LogoResultsView,
+    CreativeImageProxyView, VideoJobProxyView, AiEditView, SaveCanvasView, CreativeLogoPlacementView,
+    EraseView, UploadCreativeView, CreativeTagView, CreativeTagAssignView,
+    ContributorsView,
+)
+
+urlpatterns = [
+    path('generate/', GenerateView.as_view()),
+    path('upload/', UploadCreativeView.as_view()),
+    path('tags/', CreativeTagView.as_view()),
+    path('contributors/', ContributorsView.as_view()),
+    path('jobs/', JobsView.as_view()),
+    path('jobs/<uuid:pk>/', JobDetailView.as_view()),
+    path('gallery/', GalleryView.as_view()),
+    path('<uuid:pk>/image/', CreativeImageProxyView.as_view()),
+    path('<uuid:pk>/', CreativeDetailView.as_view()),
+    path('<uuid:pk>/logo/', CreativeLogoView.as_view()),
+    path('<uuid:pk>/tags/', CreativeTagAssignView.as_view()),
+    path('<uuid:pk>/make-video/', MakeVideoView.as_view()),
+    path('video-jobs/', VideoJobsView.as_view()),
+    path('video-jobs/<uuid:pk>/', VideoJobDetailView.as_view()),
+    path('video-jobs/<uuid:pk>/video/', VideoJobProxyView.as_view()),
+    path('jobs/<uuid:job_pk>/logo-placements/', LogoPlacementsView.as_view()),
+    path('jobs/<uuid:job_pk>/logo-editor/save/', LogoEditorSaveView.as_view()),
+    path('logo-results/', LogoResultsView.as_view()),
+    path('<uuid:pk>/ai-edit/', AiEditView.as_view()),
+    path('save-canvas/', SaveCanvasView.as_view()),
+    path('<uuid:pk>/logo-placement/', CreativeLogoPlacementView.as_view()),
+    path('<uuid:pk>/erase/', EraseView.as_view()),
+]
