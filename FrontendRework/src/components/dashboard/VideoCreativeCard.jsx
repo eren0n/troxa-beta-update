@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Download, Maximize2, Star, StarHalf, MessageSquare, X, Video } from 'lucide-react';
 import { GLASS_STYLE } from '../ui/GlassCard';
@@ -26,6 +27,26 @@ export default function VideoCreativeCard({
   const activeRating = hoverStar[creative.id] ?? creative.rating ?? 0;
   const ratingLabel = isHoveringRating ? `${hoverStar[creative.id]}/10` : creative.rating > 0 ? `${creative.rating}/10` : '-/10';
 
+  // Grid/list views can render dozens of these at once — with `autoPlay`
+  // every one of them used to start downloading and decoding its full
+  // clip immediately, even far off-screen. Only play (and let the browser
+  // buffer) the ones actually in view; pause + release the rest so they
+  // stop consuming bandwidth and CPU the moment they scroll away.
+  const videoRef = useRef(null);
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) el.play?.().catch(() => {});
+        else el.pause?.();
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [creative.video_url]);
+
   return (
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}
       // GLASS_STYLE.border is an inline style, which always beats the
@@ -40,7 +61,7 @@ export default function VideoCreativeCard({
         onClick={onOpenLightbox}
       >
         {creative.video_url ? (
-          <video src={creative.video_url} poster={creativeProxyUrl(creative.id)} muted loop playsInline autoPlay preload="auto"
+          <video ref={videoRef} src={creative.video_url} poster={creativeProxyUrl(creative.id)} muted loop playsInline preload="metadata"
             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-300" />
         ) : (
           <img src={creativeProxyUrl(creative.id)}

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { creativesApi, brandKitApi, metaApi, slackApi } from '../../lib/api';
+import { useGeneration } from '../../contexts/GenerationContext';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
 import { creativeProxyUrl } from '../../lib/creativeUrl';
@@ -76,44 +77,72 @@ function usePendingJobs(onJobsDone) {
   const onDoneRef = useRef(onJobsDone);
   useEffect(() => { onDoneRef.current = onJobsDone; }, [onJobsDone]);
 
+  // GenerationContext already polls `/creatives/jobs/:id/` every 2.5s
+  // app-wide for any job it knows about (the common case — a job started
+  // this session shows up there immediately). Piggyback on that instead
+  // of running a second, independent 3s poll for the exact same jobs.
+  const { activeJobs } = useGeneration();
+  const activeJobsRef = useRef(activeJobs);
+  useEffect(() => { activeJobsRef.current = activeJobs; }, [activeJobs]);
+
+  const resolveDone = useCallback((doneIds) => {
+    if (!doneIds.size) return;
+    let stored;
+    try { stored = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]'); }
+    catch { stored = []; }
+    if (!stored.length) return;
+
+    const remaining = stored.filter(j => !doneIds.has(j.id));
+    if (remaining.length === stored.length) return; // nothing newly done
+
+    try { localStorage.setItem(PENDING_KEY, JSON.stringify(remaining)); } catch {}
+    const remainingIds = new Set(remaining.map(j => j.id));
+    setPendingCards(prev => prev.filter(c => remainingIds.has(c._jobId)));
+    onDoneRef.current?.();
+  }, []);
+
+  useEffect(() => {
+    if (pendingCards.length === 0) return;
+    const doneIds = new Set(
+      activeJobs.filter(j => j.status === 'done' || j.status === 'error').map(j => j.id)
+    );
+    resolveDone(doneIds);
+  }, [activeJobs, pendingCards.length, resolveDone]);
+
+  // Fallback, for jobs GenerationContext never learned about — e.g. this
+  // tab was reloaded while a job was still running, so the in-memory
+  // context state reset but `localStorage` still remembers the job id.
+  // This is now the rare path rather than the norm, so it can poll more
+  // slowly, and only actually calls the API for ids the context doesn't
+  // already have covered.
   useEffect(() => {
     if (pendingCards.length === 0) return;
 
     const interval = setInterval(async () => {
+      if (document.hidden) return;
       let stored;
       try { stored = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]'); }
       catch { stored = []; }
-      if (!stored.length) { setPendingCards([]); clearInterval(interval); return; }
+      if (!stored.length) { setPendingCards([]); return; }
 
-      const remaining = [];
-      let anyDone = false;
+      const knownIds = new Set(activeJobsRef.current.map(j => j.id));
+      const orphaned = stored.filter(j => !knownIds.has(j.id));
+      if (!orphaned.length) return;
 
-      await Promise.allSettled(stored.map(async (job) => {
+      const doneIds = new Set();
+      await Promise.allSettled(orphaned.map(async (job) => {
         try {
           const res = await creativesApi.jobStatus(job.id);
-          if (res.status === 'done' || res.status === 'error') {
-            anyDone = true;
-          } else {
-            remaining.push(job);
-          }
+          if (res.status === 'done' || res.status === 'error') doneIds.add(job.id);
         } catch {
-          remaining.push(job); // keep if network error
+          // network error — leave it for the next tick
         }
       }));
-
-      try { localStorage.setItem(PENDING_KEY, JSON.stringify(remaining)); } catch {}
-
-      if (anyDone) {
-        const remainingIds = new Set(remaining.map(j => j.id));
-        setPendingCards(prev => prev.filter(c => remainingIds.has(c._jobId)));
-        onDoneRef.current?.();
-      }
-
-      if (remaining.length === 0) clearInterval(interval);
-    }, 3000);
+      resolveDone(doneIds);
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [pendingCards.length]);
+  }, [pendingCards.length, resolveDone]);
 
   return pendingCards;
 }
@@ -1027,7 +1056,7 @@ export default function GeneratedCreatives() {
                       <div className="flex flex-wrap gap-2">
                         {c.reference_thumbs.map((ref, ri) => (
                           <div key={ri} className="w-14 h-14 rounded-lg overflow-hidden bg-(--bg-hover) border border-(--border-subtle) shrink-0">
-                            <img src={ref.url} alt={ref.name} className="w-full h-full object-cover" />
+                            <img src={ref.url} alt={ref.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                           </div>
                         ))}
                       </div>

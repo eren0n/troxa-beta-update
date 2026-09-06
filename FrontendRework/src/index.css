@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* Inter/JetBrains Mono are loaded via <link> tags in index.html (with
+   preconnect) instead of a CSS @import — @import forces the browser to
+   wait for this whole stylesheet to download, parse, and start
+   downloading before it even discovers the font request, turning one
+   round trip into a serial chain (css -> googleapis -> gstatic). A <link>
+   in <head> is discovered immediately by the HTML parser and fetched in
+   parallel with everything else. */
 @import "tailwindcss";
 
 @theme {

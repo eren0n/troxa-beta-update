@@ -129,6 +129,11 @@ export const DashboardLayout = () => {
 
   useEffect(() => {
     const interval = setInterval(async () => {
+      // This poll runs for the entire dashboard session — skip it while
+      // the tab is backgrounded so a forgotten/idle tab doesn't keep
+      // hitting the activity endpoint every 12s indefinitely. It picks
+      // back up as soon as the tab is visible again.
+      if (document.hidden) return;
       try {
         const data = await activityApi.events({ limit: 20 });
         const events = data?.results || data || [];

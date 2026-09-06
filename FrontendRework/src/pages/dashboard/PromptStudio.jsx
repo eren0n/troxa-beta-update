@@ -256,9 +256,22 @@ function renderTaggedText(text) {
   TAG_REGEX.lastIndex = 0;
   while ((m = TAG_REGEX.exec(text))) {
     if (m.index > lastIndex) nodes.push(<span key={i++}>{text.slice(lastIndex, m.index)}</span>);
-    const type = TAG_TYPE_BY_LABEL[m[2].toLowerCase()] || TAG_TYPES[0];
+    const [, trigger, label, name] = m;
+    const type = TAG_TYPE_BY_LABEL[label.toLowerCase()] || TAG_TYPES[0];
+    // This sits in the highlight layer behind an otherwise-invisible
+    // textarea (see the `backdropRef` overlay below) — the real input's
+    // caret has to land in the same spot the user sees here, so the tag's
+    // exact character count/width can't change from the raw `trigger[Label:
+    // Name]` syntax. What we *can* do without touching that: fade the
+    // syntax noise and bold the asset name within the same span, so it
+    // reads like a chip label at a glance instead of raw markup, while the
+    // rendered width stays identical either way.
     nodes.push(
-      <span key={i++} className={`inline rounded-md border px-1 ${type.chip}`}>{m[0]}</span>
+      <span key={i++} className={`inline rounded-full border px-1.5 ${type.chip}`}>
+        <span className="opacity-50">{trigger}[{label}:</span>
+        <span className="font-bold">{name}</span>
+        <span className="opacity-50">]</span>
+      </span>
     );
     lastIndex = TAG_REGEX.lastIndex;
   }
@@ -696,13 +709,19 @@ function PromptStudioPage() {
         typography_preset_id: activeTypography?.id || null,
       });
 
-      // Poll until done or failed
+      // Poll until done or failed — capped so a stuck backend job can't
+      // leave this polling (and the "generating" UI) running forever.
       let creatives = [];
+      const MAX_POLL_ATTEMPTS = 200; // ~10 minutes at 3s/attempt
+      let attempts = 0;
       while (true) {
         await new Promise((r) => setTimeout(r, 3000));
         const status = await brandKitApi.studioStatus(job_id);
         if (status.status === 'done') { creatives = status.creatives || []; break; }
         if (status.status === 'failed') throw new Error(status.error || 'Generation failed.');
+        if (++attempts >= MAX_POLL_ATTEMPTS) {
+          throw new Error('Generation is taking longer than expected. Check the gallery shortly — it may still complete in the background.');
+        }
       }
 
       const count = creatives.length;

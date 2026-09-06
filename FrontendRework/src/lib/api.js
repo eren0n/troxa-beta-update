@@ -89,6 +89,34 @@ async function request(method, path, body, opts = {}) {
   return res.json();
 }
 
+// ── Short-lived GET cache for workspace-scoped reference data ─────────────
+// Tags/campaigns/logos/disclaimers/characters/contributors/fingerprint-status
+// barely change within a session, but Generate, Automation, Make Video and
+// Edit Creative each independently re-fetch all of them on mount — so
+// jumping between those pages within the same few seconds used to refire
+// the same handful of GETs every time. A short TTL cache means those
+// re-fetches are served from memory instead, while still being short
+// enough that a mutation elsewhere (new tag, new logo, ...) is only ever
+// stale for a few seconds even if some caller forgets to invalidate it.
+// Caching the in-flight *promise* (not just the resolved value) also means
+// two components that happen to mount at the same instant share one
+// request instead of firing two identical ones.
+const GET_CACHE_TTL_MS = 15000;
+const getCache = new Map(); // `${workspaceId}::${path}` -> { expires, promise }
+
+function cachedGet(path) {
+  const key = `${getWorkspaceId() || ''}::${path}`;
+  const hit = getCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.promise;
+  const promise = request('GET', path).catch((err) => { getCache.delete(key); throw err; });
+  getCache.set(key, { expires: Date.now() + GET_CACHE_TTL_MS, promise });
+  return promise;
+}
+
+function invalidateGetCache(path) {
+  getCache.delete(`${getWorkspaceId() || ''}::${path}`);
+}
+
 async function requestBlob(path) {
   const headers = { 'Content-Type': 'application/json' };
   const token = getToken();
@@ -195,26 +223,33 @@ export const creativesApi = {
   logoPlacement: (id, logoId) => request('GET', `/creatives/${id}/logo-placement/?logo_id=${logoId}`),
   eraseCreative: (id, data) => request('POST', `/creatives/${id}/erase/`, data),
   upload: (formData) => upload('/creatives/upload/', formData),
-  tags: () => request('GET', '/creatives/tags/'),
-  contributors: () => request('GET', '/creatives/contributors/'),
-  createTag: (name, color) => request('POST', '/creatives/tags/', color ? { name, color } : { name }),
+  tags: () => cachedGet('/creatives/tags/'),
+  contributors: () => cachedGet('/creatives/contributors/'),
+  createTag: (name, color) => request('POST', '/creatives/tags/', color ? { name, color } : { name })
+    .then((r) => { invalidateGetCache('/creatives/tags/'); return r; }),
   assignTags: (id, tagIds) => request('PATCH', `/creatives/${id}/tags/`, { tag_ids: tagIds }),
 };
 
 export const brandKitApi = {
-  getLogos: () => request('GET', '/brand-kit/logos/'),
-  campaigns: () => request('GET', '/brand-kit/campaigns/'),
-  createCampaign: (name, extra) => request('POST', '/brand-kit/campaigns/', { name, ...extra }),
-  updateCampaign: (id, data) => request('PATCH', `/brand-kit/campaigns/${id}/`, data),
-  deleteCampaign: (id) => request('DELETE', `/brand-kit/campaigns/${id}/`),
+  getLogos: () => cachedGet('/brand-kit/logos/'),
+  campaigns: () => cachedGet('/brand-kit/campaigns/'),
+  createCampaign: (name, extra) => request('POST', '/brand-kit/campaigns/', { name, ...extra })
+    .then((r) => { invalidateGetCache('/brand-kit/campaigns/'); return r; }),
+  updateCampaign: (id, data) => request('PATCH', `/brand-kit/campaigns/${id}/`, data)
+    .then((r) => { invalidateGetCache('/brand-kit/campaigns/'); return r; }),
+  deleteCampaign: (id) => request('DELETE', `/brand-kit/campaigns/${id}/`)
+    .then((r) => { invalidateGetCache('/brand-kit/campaigns/'); return r; }),
 
-  logos: () => request('GET', '/brand-kit/logos/'),
+  logos: () => cachedGet('/brand-kit/logos/'),
   // Paginated variant for the horizontal gallery — plain logos() above is left untouched so
   // every other consumer (GenerateCreatives, PromptStudio) keeps getting the full list it expects.
   logosPage: (limit, offset) => request('GET', `/brand-kit/logos/?limit=${limit}&offset=${offset}`),
-  uploadLogo: (formData) => upload('/brand-kit/logos/', formData),
-  setPrimaryLogo: (id) => request('PATCH', `/brand-kit/logos/${id}/`, { is_primary: true }),
-  deleteLogo: (id) => request('DELETE', `/brand-kit/logos/${id}/`),
+  uploadLogo: (formData) => upload('/brand-kit/logos/', formData)
+    .then((r) => { invalidateGetCache('/brand-kit/logos/'); return r; }),
+  setPrimaryLogo: (id) => request('PATCH', `/brand-kit/logos/${id}/`, { is_primary: true })
+    .then((r) => { invalidateGetCache('/brand-kit/logos/'); return r; }),
+  deleteLogo: (id) => request('DELETE', `/brand-kit/logos/${id}/`)
+    .then((r) => { invalidateGetCache('/brand-kit/logos/'); return r; }),
 
   ctas: () => request('GET', '/brand-kit/ctas/'),
   uploadCta: (formData) => upload('/brand-kit/ctas/', formData),
@@ -247,19 +282,28 @@ export const brandKitApi = {
   updateTypographyPreset: (id, data) => request('PATCH', `/brand-kit/typography-presets/${id}/`, data),
   deleteTypographyPreset: (id) => request('DELETE', `/brand-kit/typography-presets/${id}/`),
 
-  disclaimers: () => request('GET', '/brand-kit/disclaimers/'),
-  createDisclaimer: (text, category) => request('POST', '/brand-kit/disclaimers/', { text, category: category || 'General' }),
-  deleteDisclaimer: (id) => request('DELETE', `/brand-kit/disclaimers/${id}/`),
-  setDefaultDisclaimer: (id) => request('PATCH', `/brand-kit/disclaimers/${id}/`, { is_default: true }),
+  disclaimers: () => cachedGet('/brand-kit/disclaimers/'),
+  createDisclaimer: (text, category) => request('POST', '/brand-kit/disclaimers/', { text, category: category || 'General' })
+    .then((r) => { invalidateGetCache('/brand-kit/disclaimers/'); return r; }),
+  deleteDisclaimer: (id) => request('DELETE', `/brand-kit/disclaimers/${id}/`)
+    .then((r) => { invalidateGetCache('/brand-kit/disclaimers/'); return r; }),
+  setDefaultDisclaimer: (id) => request('PATCH', `/brand-kit/disclaimers/${id}/`, { is_default: true })
+    .then((r) => { invalidateGetCache('/brand-kit/disclaimers/'); return r; }),
 
-  characters: () => request('GET', '/brand-kit/characters/'),
+  characters: () => cachedGet('/brand-kit/characters/'),
   charactersPage: (limit, offset) => request('GET', `/brand-kit/characters/?limit=${limit}&offset=${offset}`),
-  createCharacter: (name, description) => request('POST', '/brand-kit/characters/', { name, description }),
-  updateCharacter: (id, data) => request('PATCH', `/brand-kit/characters/${id}/`, data),
-  deleteCharacter: (id) => request('DELETE', `/brand-kit/characters/${id}/`),
-  uploadCharacterImage: (id, formData) => upload(`/brand-kit/characters/${id}/images/`, formData),
-  deleteCharacterImage: (charId, imgId) => request('DELETE', `/brand-kit/characters/${charId}/images/${imgId}/`),
-  generateCharacter: (formData) => upload('/brand-kit/characters/generate/', formData),
+  createCharacter: (name, description) => request('POST', '/brand-kit/characters/', { name, description })
+    .then((r) => { invalidateGetCache('/brand-kit/characters/'); return r; }),
+  updateCharacter: (id, data) => request('PATCH', `/brand-kit/characters/${id}/`, data)
+    .then((r) => { invalidateGetCache('/brand-kit/characters/'); return r; }),
+  deleteCharacter: (id) => request('DELETE', `/brand-kit/characters/${id}/`)
+    .then((r) => { invalidateGetCache('/brand-kit/characters/'); return r; }),
+  uploadCharacterImage: (id, formData) => upload(`/brand-kit/characters/${id}/images/`, formData)
+    .then((r) => { invalidateGetCache('/brand-kit/characters/'); return r; }),
+  deleteCharacterImage: (charId, imgId) => request('DELETE', `/brand-kit/characters/${charId}/images/${imgId}/`)
+    .then((r) => { invalidateGetCache('/brand-kit/characters/'); return r; }),
+  generateCharacter: (formData) => upload('/brand-kit/characters/generate/', formData)
+    .then((r) => { invalidateGetCache('/brand-kit/characters/'); return r; }),
 
   forbiddenKeywords: () => request('GET', '/brand-kit/forbidden-keywords/'),
   addForbiddenKeyword: (keyword) => request('POST', '/brand-kit/forbidden-keywords/', { keyword }),
@@ -386,9 +430,11 @@ export const mgmtApi = {
 };
 
 export const fingerprintApi = {
-  status:   () => request('GET',  '/fingerprint/status/'),
-  merge:    () => request('POST', '/fingerprint/merge/'),
-  recreate: () => request('POST', '/fingerprint/recreate/'),
+  status:   () => cachedGet('/fingerprint/status/'),
+  merge:    () => request('POST', '/fingerprint/merge/')
+    .then((r) => { invalidateGetCache('/fingerprint/status/'); return r; }),
+  recreate: () => request('POST', '/fingerprint/recreate/')
+    .then((r) => { invalidateGetCache('/fingerprint/status/'); return r; }),
 
   // Campaign Intelligence
   campaignIntel   : (id) => request('GET',  `/fingerprint/campaign/${id}/intel/`),

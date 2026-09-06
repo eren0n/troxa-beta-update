@@ -807,13 +807,10 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
     offCtx.fillStyle = 'black';
     offCtx.fillRect(0, 0, display.width, display.height);
     const outData = offCtx.createImageData(display.width, display.height);
-    let whitePx = 0;
     for (let i = 0; i < imgData.data.length; i += 4) {
       const val = imgData.data[i + 3] > 5 ? 255 : 0;
-      if (val === 255) whitePx++;
       outData.data[i] = val; outData.data[i+1] = val; outData.data[i+2] = val; outData.data[i+3] = 255;
     }
-    console.log('[Erase] mask canvas:', display.width, 'x', display.height, '| white px:', whitePx, '| bgInfo:', bgInfoRef.current);
     offCtx.putImageData(outData, 0, 0);
     const { naturalW, naturalH } = bgInfoRef.current || {};
     if (!naturalW || !naturalH) return offscreen.toDataURL('image/png');
@@ -849,7 +846,6 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
     const sy = canvas.height / rect.height;
     const x = (e.clientX - rect.left) * sx;
     const y = (e.clientY - rect.top) * sy;
-    console.log('[Erase] stroke at', Math.round(x), Math.round(y), '| canvas:', canvas.width, 'x', canvas.height, '| rect:', Math.round(rect.width), 'x', Math.round(rect.height), '| sx:', sx.toFixed(2));
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = 'rgba(239, 68, 68, 1)';
     ctx.beginPath();

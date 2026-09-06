@@ -15,6 +15,11 @@ export function GenerationProvider({ children }) {
     if (allSettled) return;
 
     const id = setInterval(async () => {
+      // Skip the network round trip while the tab is backgrounded — a
+      // generation that finishes off-screen is picked up on the very
+      // next tick once the tab is visible again, so nothing is missed,
+      // it just isn't polled for while nobody can see it anyway.
+      if (document.hidden) return;
       const pending = activeJobs.filter(j => j.status !== 'done' && j.status !== 'error');
       const results = await Promise.allSettled(pending.map(j => creativesApi.jobStatus(j.id)));
       setActiveJobs(prev => {

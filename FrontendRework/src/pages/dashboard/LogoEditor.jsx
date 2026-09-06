@@ -387,7 +387,7 @@ export default function LogoEditor() {
             {savedImages.map(img => (
               <a key={img.id} href={img.url} target="_blank" rel="noreferrer"
                 className="rounded-xl overflow-hidden border border-white/10 hover:border-blue-500/30 transition-all group block">
-                <img src={img.url} className="w-full h-auto object-cover group-hover:opacity-90 transition-opacity" alt="Composited" />
+                <img src={img.url} className="w-full h-auto object-cover group-hover:opacity-90 transition-opacity" alt="Composited" loading="lazy" decoding="async" />
               </a>
             ))}
           </div>
@@ -479,7 +479,7 @@ export default function LogoEditor() {
                 className="w-full flex items-center gap-2 p-2 bg-black/40 hover:bg-blue-500/10 border border-white/5 hover:border-blue-500/30 rounded-xl transition-all group disabled:opacity-40 text-left">
                 <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center overflow-hidden shrink-0 border border-white/5">
                   {logo.file_url
-                    ? <img src={logo.file_url} className="w-full h-full object-contain p-0.5" alt={logo.name} />
+                    ? <img src={logo.file_url} className="w-full h-full object-contain p-0.5" alt={logo.name} loading="lazy" decoding="async" />
                     : <div className="w-4 h-4 rounded bg-white/10" />
                   }
                 </div>
@@ -515,7 +515,7 @@ export default function LogoEditor() {
                   className={`shrink-0 h-12 w-12 rounded-lg overflow-hidden border-2 transition-all ${
                     i === currentIdx ? 'border-blue-500 shadow-accent-glow' : 'border-white/10 hover:border-white/30'
                   }`}>
-                  <img src={c.image_url} className="w-full h-full object-cover" alt={`Image ${i + 1}`} />
+                  <img src={c.image_url} className="w-full h-full object-cover" alt={`Image ${i + 1}`} loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>

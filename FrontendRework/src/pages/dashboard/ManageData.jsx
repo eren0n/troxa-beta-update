@@ -717,7 +717,7 @@ export default function ManageData() {
                     <td className="px-4 py-3">
                       <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}>
                         {(ad.creative_image_full_url || ad.creative_image_url) ? (
-                          <img src={ad.creative_image_full_url || ad.creative_image_url} alt="" className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+                          <img src={ad.creative_image_full_url || ad.creative_image_url} alt="" className="w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} loading="lazy" decoding="async" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <Database className="w-5 h-5" style={{ color: 'var(--text-faint)' }} />
