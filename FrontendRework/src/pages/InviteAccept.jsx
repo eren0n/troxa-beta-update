@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { Loader2, Mail, Lock, Eye, EyeOff, User, CheckCircle2, XCircle, AlertTriangle, LogOut } from 'lucide-react';
 import { Logo } from '../components/layout/Logo';
 import { useAuth } from '../contexts/AuthContext';
-import { inviteApi, setTokens } from '../lib/api';
+import { inviteApi } from '../lib/api';
 
 export default function InviteAccept() {
   const { token } = useParams();
@@ -69,7 +69,6 @@ export default function InviteAccept() {
     setFormError(null);
     try {
       const res = await inviteApi.registerWithInvite({ invite_token: token, email, password, first_name: firstName, last_name: lastName });
-      setTokens(res.access);
       if (res.workspace_id) localStorage.setItem('active_workspace_id', res.workspace_id);
       setAccepted(true);
       await refreshUser();

@@ -1012,8 +1012,7 @@ function MetaAdsTab() {
                         setPreviewAd({ ...ad, thumbnail_url: null, video_url: null, isVideo: false });
                         setPreviewLoading(true);
                         try {
-                          const token = localStorage.getItem('access_token');
-                          const r = await fetch(`/api/mgmt/meta-ads/creative/${ad.id}/`, { headers: { Authorization: `Bearer ${token}` } });
+                          const r = await fetch(`/api/mgmt/meta-ads/creative/${ad.id}/`, { credentials: 'same-origin' });
                           if (r.ok) {
                             const ct = r.headers.get('content-type') || '';
                             if (ct.includes('application/json')) {

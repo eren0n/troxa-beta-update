@@ -107,22 +107,18 @@ function useAdMedia(adId) {
   useEffect(() => {
     if (!adId) { setMedia({ type: null, src: null, poster: null }); return; }
     setMedia({ type: null, src: null, poster: null });
-    const token = localStorage.getItem('access_token');
     const wsId = localStorage.getItem('active_workspace_id');
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      ...(wsId ? { 'X-Workspace-ID': wsId } : {}),
-    };
+    const headers = wsId ? { 'X-Workspace-ID': wsId } : {};
     let cancelled = false;
 
-    fetch(`/api/data-lab/ads/${adId}/media/`, { headers })
+    fetch(`/api/data-lab/ads/${adId}/media/`, { headers, credentials: 'same-origin' })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(info => {
         if (cancelled) return;
         if (info.media_type === 'video') {
           setMedia({ type: 'video', src: info.video_url, poster: info.poster_url || null });
         } else if (info.media_type === 'image') {
-          return fetch(`/api/data-lab/ads/${adId}/image/`, { headers })
+          return fetch(`/api/data-lab/ads/${adId}/image/`, { headers, credentials: 'same-origin' })
             .then(r => r.ok ? r.blob() : Promise.reject())
             .then(blob => {
               if (cancelled) return;

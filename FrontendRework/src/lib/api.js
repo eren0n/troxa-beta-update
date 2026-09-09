@@ -2,26 +2,20 @@ const BASE = '/api';
 
 const getWorkspaceId = () => localStorage.getItem('active_workspace_id');
 
-// The access/refresh tokens themselves live in httpOnly cookies now (set by
-// the server on login/refresh — see backend/apps/accounts/cookie_auth.py)
-// and are never touched here directly; JS can't read an httpOnly cookie
-// even if it wanted to. setTokens()/clearTokens() still mirror the access
-// token into localStorage for now, purely because a few integration panels
-// (Slack/Drive/Meta in Integrations.jsx & IntegrationsPanel.jsx, plus
-// ManageData.jsx and RMGSManagement.jsx) build their own Authorization
-// header straight from localStorage instead of going through this file.
-// Once those are migrated to cookie auth too, this mirroring — and the
-// exposure it re-creates — goes away.
-export function setTokens(access) {
-  if (access) localStorage.setItem('access_token', access);
-}
-
+// The access/refresh tokens live entirely in httpOnly cookies, set by the
+// server on login/refresh (see backend/apps/accounts/cookie_auth.py) — this
+// file never sees the raw token value, and neither can any other script on
+// the page, including an XSS payload. clearTokens() only has the workspace
+// selection left to clean up; kept as a named export since call sites read
+// better as "forget my session" than an inline localStorage.removeItem.
 export function clearTokens() {
-  localStorage.removeItem('access_token');
   localStorage.removeItem('active_workspace_id');
 }
 
-function getCsrfToken() {
+// Exported for the handful of integration panels (Slack/Drive/Meta, and a
+// couple of one-off admin fetches) that still build their own fetch() calls
+// instead of going through request()/upload() above.
+export function getCsrfToken() {
   const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -47,11 +41,8 @@ async function refreshToken() {
     throw new Error('Session expired');
   }
   const data = await res.json();
-  // Dual-write for the not-yet-migrated panels — see the comment on
-  // setTokens() above. The new access token is already live via the
-  // Set-Cookie on this same response; this is purely to keep those other
-  // files' manually-built Authorization header from going stale.
-  setTokens(data.access);
+  // The new access token is already live via the Set-Cookie on this same
+  // response — nothing else to do with the body.
   return data.access;
 }
 

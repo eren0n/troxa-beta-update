@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import LockedFeature from '../../components/dashboard/LockedFeature';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
+import { getCsrfToken } from '../../lib/api';
 
 const SlackIcon = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -207,9 +208,8 @@ function SlackCard({ activeWorkspace }) {
   const [copied, setCopied] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
 
-  const token = localStorage.getItem('access_token');
   const wsId = activeWorkspace?.id;
-  const headers = { Authorization: `Bearer ${token}`, 'X-Workspace-ID': wsId };
+  const headers = { 'X-Workspace-ID': wsId, 'X-CSRFToken': getCsrfToken() };
 
   const fetchStatus = async () => {
     try {
@@ -399,7 +399,7 @@ const FolderIcon = ({ className }) => (
   </svg>
 );
 
-function DriveImportModal({ wsId, token, onClose, onImported }) {
+function DriveImportModal({ wsId, onClose, onImported }) {
   // folder stack: [{id, name}] — null id = root
   const [folderStack, setFolderStack] = useState([{ id: null, name: 'My Drive' }]);
   const [items, setItems] = useState([]);
@@ -412,7 +412,7 @@ function DriveImportModal({ wsId, token, onClose, onImported }) {
   const [nextPage, setNextPage] = useState(null);
 
   const currentFolder = folderStack[folderStack.length - 1];
-  const headers = { Authorization: `Bearer ${token}`, 'X-Workspace-ID': wsId };
+  const headers = { 'X-Workspace-ID': wsId, 'X-CSRFToken': getCsrfToken() };
 
   const fetchItems = useCallback(async (folderId, q = '', pageToken = null) => {
     setLoading(true);
@@ -428,7 +428,7 @@ function DriveImportModal({ wsId, token, onClose, onImported }) {
     } finally {
       setLoading(false);
     }
-  }, [token, wsId]);
+  }, [wsId]);
 
   useEffect(() => { fetchItems(currentFolder.id, search); }, []);
 
@@ -720,9 +720,8 @@ function DriveCard({ activeWorkspace }) {
   const [showImport, setShowImport] = useState(false);
   const [importSuccess, setImportSuccess] = useState(null);
 
-  const token = localStorage.getItem('access_token');
   const wsId = activeWorkspace?.id;
-  const headers = { Authorization: `Bearer ${token}`, 'X-Workspace-ID': wsId };
+  const headers = { 'X-Workspace-ID': wsId, 'X-CSRFToken': getCsrfToken() };
 
   const fetchAll = async () => {
     try {
@@ -902,7 +901,7 @@ function DriveCard({ activeWorkspace }) {
 
       <AnimatePresence>
         {showImport && (
-          <DriveImportModal wsId={wsId} token={token}
+          <DriveImportModal wsId={wsId}
             onClose={() => setShowImport(false)}
             onImported={(count) => { setImportSuccess(count); setTimeout(() => setImportSuccess(null), 4000); }}
           />
@@ -968,9 +967,8 @@ function MetaCard({ activeWorkspace }) {
   const [savingPage, setSavingPage] = useState(false);
   const [selectedPage, setSelectedPage] = useState('');
 
-  const token = localStorage.getItem('access_token');
   const wsId = activeWorkspace?.id;
-  const headers = { Authorization: `Bearer ${token}`, 'X-Workspace-ID': wsId };
+  const headers = { 'X-Workspace-ID': wsId, 'X-CSRFToken': getCsrfToken() };
 
   const fetchStatus = async () => {
     try {

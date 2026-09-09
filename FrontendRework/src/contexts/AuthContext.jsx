@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi, workspaceApi, billingApi, setTokens, clearTokens } from '../lib/api';
+import { authApi, workspaceApi, billingApi, clearTokens } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -64,7 +64,8 @@ export function AuthProvider({ children }) {
   const login = async (email, password, totp_code) => {
     const response = await authApi.login(email, password, totp_code);
     if (response.requires_2fa) return { requires_2fa: true };
-    setTokens(response.access);
+    // The server already set the auth cookies on this same response —
+    // nothing left to do with response.access/refresh client-side.
     const userData = await authApi.me();
     setUser(userData);
     const wsData = await fetchWorkspaces();
@@ -74,7 +75,6 @@ export function AuthProvider({ children }) {
   };
 
   const _finalizeGoogleLogin = async (response) => {
-    setTokens(response.access);
     const userData = await authApi.me();
     setUser(userData);
     const wsData = await fetchWorkspaces();
