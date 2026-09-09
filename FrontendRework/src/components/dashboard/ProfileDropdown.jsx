@@ -18,9 +18,9 @@ export const ProfileDropdown = ({ variant = 'header', collapsed = false }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsOpen(false);
-    logout();
+    await logout();
     navigate('/login');
   };
 

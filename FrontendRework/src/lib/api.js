@@ -1,34 +1,57 @@
 const BASE = '/api';
 
-const getToken = () => localStorage.getItem('access_token');
-const getRefresh = () => localStorage.getItem('refresh_token');
 const getWorkspaceId = () => localStorage.getItem('active_workspace_id');
 
-export function setTokens(access, refresh) {
-  localStorage.setItem('access_token', access);
-  if (refresh) localStorage.setItem('refresh_token', refresh);
+// The access/refresh tokens themselves live in httpOnly cookies now (set by
+// the server on login/refresh — see backend/apps/accounts/cookie_auth.py)
+// and are never touched here directly; JS can't read an httpOnly cookie
+// even if it wanted to. setTokens()/clearTokens() still mirror the access
+// token into localStorage for now, purely because a few integration panels
+// (Slack/Drive/Meta in Integrations.jsx & IntegrationsPanel.jsx, plus
+// ManageData.jsx and RMGSManagement.jsx) build their own Authorization
+// header straight from localStorage instead of going through this file.
+// Once those are migrated to cookie auth too, this mirroring — and the
+// exposure it re-creates — goes away.
+export function setTokens(access) {
+  if (access) localStorage.setItem('access_token', access);
 }
 
 export function clearTokens() {
   localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
   localStorage.removeItem('active_workspace_id');
 }
 
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+// Django's double-submit CSRF check only applies to requests the cookie-auth
+// path actually authenticated (see CookieJWTAuthentication.authenticate) —
+// harmless to attach on every mutating call regardless.
+function csrfHeader(method) {
+  if (!MUTATING_METHODS.has(method?.toUpperCase())) return {};
+  const token = getCsrfToken();
+  return token ? { 'X-CSRFToken': token } : {};
+}
+
 async function refreshToken() {
-  const refresh = getRefresh();
-  if (!refresh) throw new Error('No refresh token');
   const res = await fetch(`${BASE}/auth/token/refresh/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refresh }),
+    credentials: 'same-origin',
   });
   if (!res.ok) {
     clearTokens();
     throw new Error('Session expired');
   }
   const data = await res.json();
-  localStorage.setItem('access_token', data.access);
+  // Dual-write for the not-yet-migrated panels — see the comment on
+  // setTokens() above. The new access token is already live via the
+  // Set-Cookie on this same response; this is purely to keep those other
+  // files' manually-built Authorization header from going stale.
+  setTokens(data.access);
   return data.access;
 }
 
@@ -36,15 +59,12 @@ let isRefreshing = false;
 let refreshQueue = [];
 
 async function request(method, path, body, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...opts.headers };
-
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const headers = { 'Content-Type': 'application/json', ...csrfHeader(method), ...opts.headers };
 
   const wsId = getWorkspaceId();
   if (wsId) headers['X-Workspace-ID'] = wsId;
 
-  const config = { method, headers };
+  const config = { method, headers, credentials: 'same-origin' };
   if (body !== undefined) config.body = JSON.stringify(body);
 
   let res = await fetch(`${BASE}${path}`, config);
@@ -52,16 +72,14 @@ async function request(method, path, body, opts = {}) {
   if (res.status === 401 && !opts._retry) {
     if (isRefreshing) {
       await new Promise((resolve) => refreshQueue.push(resolve));
-      headers['Authorization'] = `Bearer ${getToken()}`;
-      res = await fetch(`${BASE}${path}`, { ...config, headers });
+      res = await fetch(`${BASE}${path}`, config);
     } else {
       isRefreshing = true;
       try {
-        const newToken = await refreshToken();
-        headers['Authorization'] = `Bearer ${newToken}`;
+        await refreshToken();
         refreshQueue.forEach((r) => r());
         refreshQueue = [];
-        res = await fetch(`${BASE}${path}`, { ...config, headers });
+        res = await fetch(`${BASE}${path}`, config);
       } catch (e) {
         refreshQueue = [];
         clearTokens();
@@ -118,43 +136,27 @@ function invalidateGetCache(path) {
 }
 
 async function requestBlob(path) {
-  const headers = { 'Content-Type': 'application/json' };
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const wsId = getWorkspaceId();
-  if (wsId) headers['X-Workspace-ID'] = wsId;
-  const res = await fetch(`${BASE}${path}`, { method: 'GET', headers });
+  const res = await fetch(`${BASE}${path}`, { method: 'GET', credentials: 'same-origin' });
   if (!res.ok) throw new Error('Export failed');
   return res.blob();
 }
 
 // Authenticated binary fetch with the same 401-refresh-retry as request()
-// above, minus the JSON handling — used for images/downloads that must be
-// fetched with a normal Authorization header instead of a token baked into
-// the URL (which would otherwise land in server access logs and browser
-// history on every request).
+// above, minus the JSON handling — used for images/downloads.
 async function fetchAuthedBlob(path) {
-  const headers = {};
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const wsId = getWorkspaceId();
-  if (wsId) headers['X-Workspace-ID'] = wsId;
-
-  let res = await fetch(`${BASE}${path}`, { headers });
+  let res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
 
   if (res.status === 401) {
     if (isRefreshing) {
       await new Promise((resolve) => refreshQueue.push(resolve));
-      headers['Authorization'] = `Bearer ${getToken()}`;
-      res = await fetch(`${BASE}${path}`, { headers });
+      res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
     } else {
       isRefreshing = true;
       try {
-        const newToken = await refreshToken();
-        headers['Authorization'] = `Bearer ${newToken}`;
+        await refreshToken();
         refreshQueue.forEach((r) => r());
         refreshQueue = [];
-        res = await fetch(`${BASE}${path}`, { headers });
+        res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
       } catch (e) {
         refreshQueue = [];
         clearTokens();
@@ -175,27 +177,23 @@ export function fetchCreativeImageBlob(id, { logo = false } = {}) {
 }
 
 async function upload(path, formData, method = 'POST', _retry = false) {
-  const headers = {};
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const headers = { ...csrfHeader(method) };
   const wsId = getWorkspaceId();
   if (wsId) headers['X-Workspace-ID'] = wsId;
 
-  let res = await fetch(`${BASE}${path}`, { method, headers, body: formData });
+  let res = await fetch(`${BASE}${path}`, { method, headers, body: formData, credentials: 'same-origin' });
 
   if (res.status === 401 && !_retry) {
     if (isRefreshing) {
       await new Promise((resolve) => refreshQueue.push(resolve));
-      headers['Authorization'] = `Bearer ${getToken()}`;
-      res = await fetch(`${BASE}${path}`, { method, headers, body: formData });
+      res = await fetch(`${BASE}${path}`, { method, headers, body: formData, credentials: 'same-origin' });
     } else {
       isRefreshing = true;
       try {
-        const newToken = await refreshToken();
-        headers['Authorization'] = `Bearer ${newToken}`;
+        await refreshToken();
         refreshQueue.forEach((r) => r());
         refreshQueue = [];
-        res = await fetch(`${BASE}${path}`, { method, headers, body: formData });
+        res = await fetch(`${BASE}${path}`, { method, headers, body: formData, credentials: 'same-origin' });
       } catch (e) {
         refreshQueue = [];
         clearTokens();
@@ -225,6 +223,10 @@ export const authApi = {
   login: (email, password, totp_code) => request('POST', '/auth/token/', { email, password, ...(totp_code ? { totp_code } : {}) }),
   googleLogin: (access_token, totp_code) => request('POST', '/auth/google/', { access_token, ...(totp_code ? { totp_code } : {}) }),
   googleLink: (access_token, password) => request('POST', '/auth/google/link/', { access_token, password }),
+  // Clears the httpOnly auth cookies server-side and blacklists the refresh
+  // token — a client-side-only "forget the token" isn't possible (or
+  // meaningful) once JS can't read it in the first place.
+  logout: () => request('POST', '/auth/logout/'),
   register: (data) => request('POST', '/auth/register/', data),
   me: () => request('GET', '/users/me/'),
   updateMe: (data) => request('PATCH', '/users/me/', data),

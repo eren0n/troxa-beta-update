@@ -41,11 +41,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    // The auth cookie is httpOnly — there's nothing client-readable to check
+    // before deciding whether to even try. Just ask /me and let a 401 mean
+    // "not logged in" (no session cookie, or it expired and the refresh
+    // cookie is gone/blacklisted too).
     (async () => {
       try {
         const userData = await authApi.me();
@@ -65,7 +64,7 @@ export function AuthProvider({ children }) {
   const login = async (email, password, totp_code) => {
     const response = await authApi.login(email, password, totp_code);
     if (response.requires_2fa) return { requires_2fa: true };
-    setTokens(response.access, response.refresh);
+    setTokens(response.access);
     const userData = await authApi.me();
     setUser(userData);
     const wsData = await fetchWorkspaces();
@@ -75,7 +74,7 @@ export function AuthProvider({ children }) {
   };
 
   const _finalizeGoogleLogin = async (response) => {
-    setTokens(response.access, response.refresh);
+    setTokens(response.access);
     const userData = await authApi.me();
     setUser(userData);
     const wsData = await fetchWorkspaces();
@@ -96,7 +95,8 @@ export function AuthProvider({ children }) {
     return _finalizeGoogleLogin(response);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await authApi.logout(); } catch (_) {}
     clearTokens();
     setUser(null);
     setWorkspaces([]);

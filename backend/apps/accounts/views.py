@@ -12,6 +12,7 @@ from .serializers import (
     UserSerializer, WorkspaceSerializer, RegisterSerializer,
     MemberSerializer, InviteSerializer
 )
+from .cookie_auth import set_auth_cookies, clear_auth_cookies, prime_csrf_cookie
 
 
 def get_workspace(request):
@@ -74,7 +75,75 @@ class TokenObtainView(APIView):
                 return Response({'detail': 'Invalid 2FA code.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
-        return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        response = Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        prime_csrf_cookie(request)
+        return response
+
+
+class CookieTokenRefreshView(APIView):
+    """Reads the refresh token from the httpOnly cookie instead of the
+    request body, and writes the rotated access/refresh pair back as
+    cookies instead of returning them in the response body.
+
+    No authentication_classes: this view validates the refresh cookie
+    itself (TokenRefreshSerializer) rather than relying on DRF's normal
+    authenticated-user flow, so it doesn't need — and shouldn't trigger —
+    CookieJWTAuthentication's CSRF check (which would otherwise fire if a
+    still-valid access_token cookie happens to be present too). The
+    refresh cookie's SameSite=Lax + its path being scoped to only
+    /api/auth/ is what stops it being replayed cross-site."""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+        from rest_framework_simplejwt.exceptions import TokenError
+        from .cookie_auth import REFRESH_COOKIE
+
+        raw_refresh = request.COOKIES.get(REFRESH_COOKIE)
+        if not raw_refresh:
+            return Response({'detail': 'Refresh token missing.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        serializer = TokenRefreshSerializer(data={'refresh': raw_refresh})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError:
+            response = Response({'detail': 'Refresh token invalid or expired.'}, status=status.HTTP_401_UNAUTHORIZED)
+            clear_auth_cookies(response)
+            return response
+
+        data = serializer.validated_data
+        response = Response({'access': data['access']})
+        # ROTATE_REFRESH_TOKENS is on, so a fresh refresh token comes back
+        # too — fall back to the one we were sent in the (unlikely) case
+        # rotation is ever turned off.
+        set_auth_cookies(response, data['access'], data.get('refresh', raw_refresh))
+        return response
+
+
+class LogoutView(APIView):
+    """Clears the auth cookies and blacklists the refresh token so it can't
+    be replayed even if it leaked before logout. Same reasoning as
+    CookieTokenRefreshView for skipping authentication_classes."""
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken as RT
+        from rest_framework_simplejwt.exceptions import TokenError
+        from .cookie_auth import REFRESH_COOKIE
+
+        raw_refresh = request.COOKIES.get(REFRESH_COOKIE)
+        if raw_refresh:
+            try:
+                RT(raw_refresh).blacklist()
+            except TokenError:
+                pass
+
+        response = Response({'detail': 'Logged out.'})
+        clear_auth_cookies(response)
+        return response
 
 
 class RegisterView(APIView):
@@ -196,7 +265,10 @@ class GoogleAuthView(APIView):
                 return Response({'detail': 'Invalid 2FA code.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(user)
-        return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        response = Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        prime_csrf_cookie(request)
+        return response
 
 
 class GoogleLinkView(APIView):
@@ -231,7 +303,10 @@ class GoogleLinkView(APIView):
         user.save(update_fields=['google_linked'])
 
         refresh = RefreshToken.for_user(user)
-        return Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        response = Response({'access': str(refresh.access_token), 'refresh': str(refresh)})
+        set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        prime_csrf_cookie(request)
+        return response
 
 
 def _unique_username(email):
@@ -248,6 +323,11 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Frontend calls this on every app load to check "am I logged in" —
+        # piggyback the CSRF cookie priming here too, in case a session
+        # somehow reached this point without ever hitting a token-issuing
+        # view (cookie carried over from a previous CSRF_COOKIE_AGE window).
+        prime_csrf_cookie(request)
         return Response(UserSerializer(request.user, context={'request': request}).data)
 
     def patch(self, request):
@@ -591,9 +671,12 @@ class RegisterWithInviteView(APIView):
         invite.save(update_fields=['status'])
 
         refresh = RefreshToken.for_user(user)
-        return Response({
+        response = Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'workspace_id': str(invite.workspace.id),
             'workspace_name': invite.workspace.name,
         }, status=201)
+        set_auth_cookies(response, str(refresh.access_token), str(refresh))
+        prime_csrf_cookie(request)
+        return response

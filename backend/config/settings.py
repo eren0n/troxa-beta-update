@@ -26,6 +26,15 @@ SECURE_HSTS_SECONDS = 31536000          # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
+# CSRF cookie — this one stays JS-readable (httponly=False) on purpose: the
+# frontend reads it to echo back as the X-CSRFToken header on mutating
+# requests, per Django's double-submit-cookie pattern. It's a per-session
+# nonce, not a credential — unlike the auth cookies below, there's nothing
+# to protect by hiding it from JS.
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
+
 AUTH_USER_MODEL = 'accounts.User'
 
 INSTALLED_APPS = [
@@ -38,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.postgres',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'drf_spectacular',
     'apps.accounts',
@@ -115,7 +125,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.accounts.cookie_auth.CookieJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -173,6 +183,12 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'AUTH_HEADER_TYPES': ('Bearer',),
     'SIGNING_KEY': _jwt_signing_key,
+    # A refreshed access token also rotates the refresh token and blacklists
+    # the old one — a stolen refresh cookie is only good for one silent
+    # refresh before it stops working, instead of being replayable for the
+    # full 7-day window.
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 CORS_ALLOW_ALL_ORIGINS = False
@@ -190,7 +206,14 @@ CORS_ALLOW_HEADERS = [
     'authorization',
     'content-type',
     'x-workspace-id',
+    'x-csrftoken',
 ]
+# Lets the browser attach the auth/CSRF cookies to cross-origin requests
+# from the allowed origins above (e.g. local dev on a different port hitting
+# the deployed API). In production the SPA and API share an origin, so
+# fetch() already sends cookies without this — it only matters for the
+# CORS_ALLOWED_ORIGINS entries that aren't same-origin.
+CORS_ALLOW_CREDENTIALS = True
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 

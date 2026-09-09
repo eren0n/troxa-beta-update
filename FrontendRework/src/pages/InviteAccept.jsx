@@ -69,7 +69,7 @@ export default function InviteAccept() {
     setFormError(null);
     try {
       const res = await inviteApi.registerWithInvite({ invite_token: token, email, password, first_name: firstName, last_name: lastName });
-      setTokens(res.access, res.refresh);
+      setTokens(res.access);
       if (res.workspace_id) localStorage.setItem('active_workspace_id', res.workspace_id);
       setAccepted(true);
       await refreshUser();

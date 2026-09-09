@@ -2,15 +2,18 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
-from apps.accounts.views import RegisterView, RegisterWithInviteView, TokenObtainView, GoogleAuthView, GoogleLinkView
+from apps.accounts.views import (
+    RegisterView, RegisterWithInviteView, TokenObtainView, GoogleAuthView, GoogleLinkView,
+    CookieTokenRefreshView, LogoutView,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/token/', TokenObtainView.as_view(), name='token_obtain'),
-    path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/token/refresh/', CookieTokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/logout/', LogoutView.as_view(), name='logout'),
     path('api/auth/register/', RegisterView.as_view(), name='register'),
     path('api/auth/register-invite/', RegisterWithInviteView.as_view(), name='register_invite'),
     path('api/auth/google/', GoogleAuthView.as_view(), name='google_auth'),
