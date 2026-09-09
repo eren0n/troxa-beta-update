@@ -52,9 +52,21 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) 
 
   useEffect(() => {
     if (!user) return;
-    mgmtApi.myPermissions()
-      .then(p => setHasMgmtAccess(p.tabs.length > 0 || p.is_upper_management))
-      .catch(() => {});
+    const fetchPerms = () => {
+      mgmtApi.myPermissions()
+        .then(p => setHasMgmtAccess(p.tabs.length > 0 || p.is_upper_management))
+        .catch(() => {});
+    };
+    fetchPerms();
+    // Re-check when the tab regains focus — an admin may have granted access
+    // while this session was already open, and a full mount only happens once.
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchPerms(); };
+    window.addEventListener('focus', fetchPerms);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', fetchPerms);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [user?.email]);
   const LOCKED_PATHS = ['/dashboard/brand-kit', '/dashboard/automation'];
   const INDIVIDUAL_LOCKED_PATHS = ['/dashboard/automation'];

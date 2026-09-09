@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, SquarePlus, Image, Palette,
@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { preloadDashboardRoute } from '../../lib/dashboardRoutes';
+import { mgmtApi } from '../../lib/api';
 
 const STORAGE_KEY = 'dock_pinned';
 
@@ -68,6 +69,24 @@ export const BottomDock = () => {
   const navigate = useNavigate();
   const { isFreeTier, isIndividualTier, isDataUser, user } = useAuth();
   const isAdmin = RMGS_ADMINS.has(user?.email);
+  const [hasMgmtAccess, setHasMgmtAccess] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchPerms = () => {
+      mgmtApi.myPermissions()
+        .then(p => setHasMgmtAccess(p.tabs.length > 0 || p.is_upper_management))
+        .catch(() => {});
+    };
+    fetchPerms();
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchPerms(); };
+    window.addEventListener('focus', fetchPerms);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', fetchPerms);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [user?.email]);
 
   // pinned = always visible · false = auto-hide (hover to show)
   const [pinned, setPinned] = useState(() => localStorage.getItem(STORAGE_KEY) !== '0');
@@ -84,7 +103,7 @@ export const BottomDock = () => {
   };
 
   const adminItems = [
-    ...(isAdmin ? [{ name: 'RMGS Mgmt', icon: Shield, path: '/dashboard/mgmt', isAdmin: true }] : []),
+    ...((isAdmin || hasMgmtAccess) ? [{ name: 'RMGS Mgmt', icon: Shield, path: '/dashboard/mgmt', isAdmin: true }] : []),
     // Manage Data hidden
   ];
   const groups = [
