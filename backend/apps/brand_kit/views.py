@@ -10,15 +10,42 @@ logger = logging.getLogger(__name__)
 
 from apps.accounts.views import get_workspace, require_editor, require_admin
 
-# ── MIME validation ────────────────────────────────────────────────────────────
+# ── Upload validation ──────────────────────────────────────────────────────────
+# Brand kit files are served back out of media/ on the app's own origin, so
+# anything a browser parses as a document (SVG, HTML, XML) would be stored
+# XSS running same-origin. The extension has to be checked alongside the
+# declared MIME because nginx derives the response Content-Type from the
+# extension — "evil.svg" sent as image/png would still be served back as
+# image/svg+xml — and Pillow has to recognise the actual bytes, which it
+# won't for a document masquerading as an image.
 _ALLOWED_IMAGE_MIME = ('image/jpeg', 'image/png', 'image/webp', 'image/gif')
+_ALLOWED_IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+_ALLOWED_PIL_FORMATS = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+_IMAGE_REJECTED = 'Only JPEG, PNG, WebP, or GIF images are accepted.'
 
 
 def _check_image_mime(file):
     """Return (ok: bool, error_msg: str|None). True = file is an allowed image."""
-    mime = file.content_type or mimetypes.guess_type(file.name)[0] or ''
+    import os
+
+    mime = (file.content_type or mimetypes.guess_type(file.name or '')[0] or '').lower()
     if not any(mime.startswith(p) for p in _ALLOWED_IMAGE_MIME):
-        return False, 'Only JPEG, PNG, WebP, or GIF images are accepted.'
+        return False, _IMAGE_REJECTED
+
+    if os.path.splitext(file.name or '')[1].lower() not in _ALLOWED_IMAGE_EXT:
+        return False, _IMAGE_REJECTED
+
+    try:
+        from PIL import Image as _PILImage
+        file.seek(0)
+        with _PILImage.open(file) as im:
+            fmt = (im.format or '').upper()
+        file.seek(0)
+    except Exception:
+        return False, 'That file could not be read as an image.'
+    if fmt not in _ALLOWED_PIL_FORMATS:
+        return False, _IMAGE_REJECTED
+
     return True, None
 from apps.activity.utils import log_event
 from .models import Campaign, Logo, Cta, Promo, WinningStatic, Disclaimer, Character, CharacterImage, DisclaimerKeyword, PalettePreset, TypographyPreset

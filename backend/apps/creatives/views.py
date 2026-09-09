@@ -309,11 +309,56 @@ class GalleryView(APIView):
         })
 
 
+# Uploads land in media/ and are served straight back from the app's own
+# origin, so anything a browser will parse as a *document* (SVG, HTML, XML)
+# is a stored-XSS vector: script inside it runs same-origin and can call the
+# API as whoever opens it. httpOnly cookies don't help — the script can't
+# read the session token, but it doesn't need to, the browser attaches it.
+#
+# The extension matters as much as the declared MIME, because nginx picks
+# the response Content-Type from the extension when serving media back out:
+# an "evil.svg" uploaded with a video/mp4 content type would still come back
+# as image/svg+xml. So both have to be acceptable, and for images Pillow has
+# to actually recognise the bytes — which it can't do for SVG or HTML.
+_ALLOWED_IMAGE_EXT = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+_ALLOWED_VIDEO_EXT = {'.mp4', '.mov', '.webm', '.m4v'}
+_ALLOWED_PIL_FORMATS = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+
+_UPLOAD_REJECTED = (
+    'Unsupported file type. Upload a JPEG, PNG, WebP or GIF image, '
+    'or an MP4, MOV or WebM video.'
+)
+
+
+def _validate_creative_upload(file):
+    """Returns (media_type, None) for an acceptable upload, else (None, message)."""
+    import mimetypes
+
+    ext = os.path.splitext(file.name or '')[1].lower()
+    mime = (file.content_type or mimetypes.guess_type(file.name or '')[0] or '').lower()
+
+    if ext in _ALLOWED_IMAGE_EXT and mime.startswith('image/') and mime != 'image/svg+xml':
+        try:
+            file.seek(0)
+            with PILImage.open(file) as im:
+                fmt = (im.format or '').upper()
+            file.seek(0)
+        except Exception:
+            return None, 'That file could not be read as an image.'
+        if fmt not in _ALLOWED_PIL_FORMATS:
+            return None, _UPLOAD_REJECTED
+        return 'Photo', None
+
+    if ext in _ALLOWED_VIDEO_EXT and mime.startswith('video/'):
+        return 'Video', None
+
+    return None, _UPLOAD_REJECTED
+
+
 class UploadCreativeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        import mimetypes
         ws = get_workspace(request)
         if not ws:
             return Response(status=404)
@@ -322,11 +367,9 @@ class UploadCreativeView(APIView):
         if not file:
             return Response({'error': 'file required'}, status=400)
 
-        mime = file.content_type or mimetypes.guess_type(file.name)[0] or ''
-        if mime.startswith('video/'):
-            media_type = 'Video'
-        else:
-            media_type = 'Photo'
+        media_type, upload_error = _validate_creative_upload(file)
+        if upload_error:
+            return Response({'error': upload_error}, status=400)
 
         # Real pixel dimensions, not a client-supplied guess — every upload
         # used to default to '1:1' regardless of the actual image shape.
