@@ -7,7 +7,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { creativesApi, brandKitApi } from '../../lib/api';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import TagBadge from '../../components/dashboard/TagBadge';
 import TagPicker from '../../components/dashboard/TagPicker';
@@ -32,7 +32,7 @@ export default function MakeVideo() {
   const [contributorsList, setContributorsList] = useState([]);
   const { creatives, setCreatives, loading, hasMore, sentinelRef } = useCreativeGallery(filters, allTags, { pageSize: 12 });
 
-  // Currently selected source image: { creative, sourceImageUrl, previewUrl, name, campaignName }
+  // Currently selected source image: { creative, sourceImageUrl, name, campaignName }
   const [selected, setSelected] = useState(null);
 
   const [videoPrompt, setVideoPrompt] = useState(DEFAULT_VIDEO_PROMPT);
@@ -87,7 +87,6 @@ export default function MakeVideo() {
     setSelected({
       creative,
       sourceImageUrl: null,
-      previewUrl: creativeProxyUrl(creative.id),
       name: creative.name,
       campaignName: creative.campaign_name,
     });
@@ -181,7 +180,7 @@ export default function MakeVideo() {
                         isSel ? 'border-(--accent) ring-2 ring-[color-mix(in_srgb,var(--accent)_20%,transparent)]' : 'border-transparent hover:border-white/15'
                       }`}
                     >
-                      <img src={creativeProxyUrl(creative.id)}
+                      <CreativeImg creativeId={creative.id}
                         className={`w-full h-full object-cover transition-all duration-300 ${isSel ? 'opacity-100' : 'opacity-60 group-hover:opacity-90'}`}
                         alt={creative.name} loading="lazy" decoding="async" />
                       <div className="absolute inset-0 bg-linear-to-t from-black/70 via-transparent to-transparent" />
@@ -238,7 +237,7 @@ export default function MakeVideo() {
           <div style={GLASS_STYLE} className="rounded-2xl overflow-hidden">
             {selected ? (
               <div className="relative h-44 bg-black">
-                <img src={selected.previewUrl} className="w-full h-full object-cover opacity-70" alt={selected.name} />
+                <CreativeImg creativeId={selected.creative.id} className="w-full h-full object-cover opacity-70" alt={selected.name} />
                 <div className="absolute inset-0 bg-linear-to-t from-black via-black/40 to-transparent" />
                 <div className="absolute top-3 right-3 flex items-center gap-1.5">
                   <TagPicker

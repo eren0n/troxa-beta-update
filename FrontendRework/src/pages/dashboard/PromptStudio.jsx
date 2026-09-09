@@ -12,7 +12,8 @@ import { FONT_OPTIONS, PALETTE_ROLES, fontStack, ensureFontLoaded } from '../../
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { useCreativeImage } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 
 // Each type has its own trigger character — Logo/CTA/Promo deliberately share "&" since
 // they're all "brand marketing marks" a static drops in, and 6 distinct symbols was one too many.
@@ -65,11 +66,11 @@ function CompactSelect({ label, value, onChange, children }) {
 const BLANK_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const NO_TAGS = [];
 
-function galleryImgSrc(item) {
-  return item.image_url?.startsWith('https://') ? item.image_url : creativeProxyUrl(item.id);
+function isExternalImageUrl(item) {
+  return item.image_url?.startsWith('https://');
 }
 
-function LazyImg({ src, className, scrollRoot }) {
+function LazyImg({ item, className, scrollRoot }) {
   const ref = useRef(null);
   const [revealed, setRevealed] = useState(false);
   useEffect(() => {
@@ -83,7 +84,12 @@ function LazyImg({ src, className, scrollRoot }) {
     obs.observe(el);
     return () => obs.disconnect();
   }, [scrollRoot, revealed]);
-  return <img ref={ref} src={revealed ? src : BLANK_SRC} alt="" className={className} decoding="async" />;
+  const external = isExternalImageUrl(item);
+  // Only fetch the authenticated blob once this thumbnail has actually
+  // scrolled into view — same deferral the old BLANK_SRC swap gave us.
+  const blobUrl = useCreativeImage(revealed && !external ? item.id : null);
+  const src = external ? item.image_url : blobUrl;
+  return <img ref={ref} src={revealed && src ? src : BLANK_SRC} alt="" className={className} decoding="async" />;
 }
 
 function GalleryReferencePicker({ selected, onClose, onConfirm }) {
@@ -105,7 +111,11 @@ function GalleryReferencePicker({ selected, onClose, onConfirm }) {
     if (selectedIds.has(key)) {
       setDraft((prev) => prev.filter((d) => String(d.id) !== key));
     } else {
-      setDraft((prev) => [...prev, { id: item.id, name: item.name || 'Reference', url: galleryImgSrc(item) }]);
+      setDraft((prev) => [...prev, {
+        id: item.id,
+        name: item.name || 'Reference',
+        ...(isExternalImageUrl(item) ? { url: item.image_url } : { creativeId: item.id }),
+      }]);
     }
   };
 
@@ -173,7 +183,7 @@ function GalleryReferencePicker({ selected, onClose, onConfirm }) {
                     className={`relative rounded-xl overflow-hidden aspect-square cursor-pointer border-2 transition-all ${active ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-transparent hover:border-white/15'}`}
                   >
                     <LazyImg
-                      src={galleryImgSrc(item)}
+                      item={item}
                       scrollRoot={scrollRef}
                       className={`w-full h-full object-cover transition-opacity duration-200 ${active ? 'opacity-100' : 'opacity-50 hover:opacity-80'}`}
                     />
@@ -326,6 +336,8 @@ function AddedBox({ typeKey, title, desc, addedItems, loading, onOpenPicker, onR
               <div className="aspect-square rounded-lg overflow-hidden bg-white/4 mb-1.5 border border-white/5 flex items-center justify-center">
                 {item.url ? (
                   <img src={item.url} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+                ) : item.creativeId ? (
+                  <CreativeImg creativeId={item.creativeId} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
                 ) : (
                   <type.icon className="w-5 h-5 text-slate-700" />
                 )}

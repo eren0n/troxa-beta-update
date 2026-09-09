@@ -12,7 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { automationApi, brandKitApi, creativesApi, fingerprintApi } from '../../lib/api';
 import LockedFeature from '../../components/dashboard/LockedFeature';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
 import CreativeFilterBar, { EMPTY_CREATIVE_FILTERS } from '../../components/dashboard/CreativeFilterBar';
@@ -668,7 +668,7 @@ function NewPipelineModal({ onClose, onCreated, editTarget = null }) {
                       <motion.div key={item.id} onClick={() => toggleStatic(item.id)}
                         whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                         className={`group relative rounded-xl overflow-hidden aspect-4/5 cursor-pointer border-2 transition-all ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-transparent hover:border-white/15'}`}>
-                        <img src={creativeProxyUrl(item.id)}
+                        <CreativeImg creativeId={item.id}
                           className={`w-full h-full object-cover transition-all duration-300 ${selected ? 'opacity-100' : 'opacity-55 group-hover:opacity-85'}`}
                           alt={item.name} loading="lazy" decoding="async" />
                         <div className="absolute inset-0 bg-linear-to-t from-black/40 via-transparent to-transparent" />

@@ -6,7 +6,7 @@ import { creativesApi, brandKitApi } from '../../lib/api';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
 import CreativeEditorPane from '../../components/dashboard/CreativeEditorPane';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import TagBadge from '../../components/dashboard/TagBadge';
 import TagPicker from '../../components/dashboard/TagPicker';
@@ -165,7 +165,7 @@ export default function EditCreative() {
                     ) : (
                       <>
                         <div className="relative bg-black overflow-hidden aspect-4/5 w-full">
-                          <img src={creativeProxyUrl(creative.id)}
+                          <CreativeImg creativeId={creative.id}
                             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-300"
                             alt={creative.name} loading="lazy" decoding="async" />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">

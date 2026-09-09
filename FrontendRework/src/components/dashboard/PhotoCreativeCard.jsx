@@ -2,7 +2,8 @@ import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { Download, Pencil, Maximize2, Star, StarHalf, Video, MessageSquare, X } from 'lucide-react';
 import { GLASS_STYLE } from '../ui/GlassCard';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { downloadCreativeImage } from '../../lib/creativeUrl';
+import { CreativeImg } from '../ui/CreativeImg';
 import TagBadge from './TagBadge';
 import TagPicker from './TagPicker';
 import InlineRename from './InlineRename';
@@ -31,7 +32,7 @@ export default function PhotoCreativeCard({
         className={`relative bg-black overflow-hidden shrink-0 ${view === 'grid' ? 'aspect-4/5 w-full' : 'w-28 aspect-4/5 rounded-xl'}`}
         onClick={onOpenLightbox}
       >
-        <img src={creativeProxyUrl(creative.id)}
+        <CreativeImg creativeId={creative.id}
           className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-300"
           alt={creative.name} loading="lazy" decoding="async" />
 
@@ -151,10 +152,10 @@ export default function PhotoCreativeCard({
             className="flex-1 py-1.5 bg-white/5 hover:bg-violet-600 border border-white/10 hover:border-violet-500 rounded-lg text-[9px] font-bold uppercase tracking-widest text-gray-300 hover:text-white transition-all flex items-center justify-center gap-1.5">
             <Video className="w-3 h-3" /> Make Video
           </button>
-          <a href={creativeProxyUrl(creative.id)} download={`${creative.name || creative.id}.jpg`}
+          <button onClick={() => downloadCreativeImage(creative.id, `${creative.name || creative.id}.jpg`)}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-all" title="Download">
             <Download className="w-3.5 h-3.5" />
-          </a>
+          </button>
         </div>
       </div>
     </motion.div>

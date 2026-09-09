@@ -7,7 +7,7 @@ import { useGeneration } from '../../contexts/GenerationContext';
 import { brandKitApi, creativesApi, fingerprintApi } from '../../lib/api';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import UploadCreativeButton from '../../components/dashboard/UploadCreativeButton';
 import CreativeFilterBar, { EMPTY_CREATIVE_FILTERS } from '../../components/dashboard/CreativeFilterBar';
@@ -943,8 +943,8 @@ export default function GenerateCreatives() {
                       whileTap={{ scale: 0.98 }}
                       className={`group relative rounded-xl overflow-hidden aspect-4/5 cursor-pointer border-2 transition-all ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-transparent hover:border-white/15'}`}
                     >
-                      <img
-                        src={creativeProxyUrl(item.id)}
+                      <CreativeImg
+                        creativeId={item.id}
                         className={`w-full h-full object-cover transition-all duration-300 ${selected ? 'opacity-100' : 'opacity-55 group-hover:opacity-85'}`}
                         alt={item.name}
                         loading="lazy"

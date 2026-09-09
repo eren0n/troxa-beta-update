@@ -12,7 +12,7 @@ import { creativesApi, brandKitApi, metaApi, slackApi } from '../../lib/api';
 import { useGeneration } from '../../contexts/GenerationContext';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { useCreativeImage } from '../../lib/creativeUrl';
 import { getPortalRoot } from '../../lib/portalRoot';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import UploadCreativeButton from '../../components/dashboard/UploadCreativeButton';
@@ -468,7 +468,7 @@ export default function GeneratedCreatives() {
   const openLightboxFor = (creative) => {
     setMediaDims(null);
     setLightbox({
-      items: creatives.map(c => ({ url: creativeProxyUrl(c.id), name: c.name, creative: c })),
+      items: creatives.map(c => ({ id: c.id, name: c.name, creative: c })),
       index: creatives.indexOf(creative),
     });
   };
@@ -566,6 +566,10 @@ export default function GeneratedCreatives() {
 
   // Fetch metrics for creative shown in lightbox if meta_linked
   const lightboxCreative = lightbox?.items[lightbox.index]?.creative;
+  // The lightbox image (also used as the video poster frame) needs the
+  // authenticated blob fetch — computed here, once per open item, rather
+  // than eagerly for every item when the lightbox opens.
+  const lightboxImageUrl = useCreativeImage(lightboxCreative?.id);
   useEffect(() => {
     if (!lightboxCreative?.id || !lightboxCreative.meta_linked) return;
     if (metaMetrics[lightboxCreative.id] !== undefined) return; // already fetched
@@ -772,7 +776,7 @@ export default function GeneratedCreatives() {
           const isVideo = c?.media_type === 'Video';
           // The gallery proxy URL always resolves to the source photo — for
           // video creatives the actual rendered clip lives at c.video_url.
-          const mediaUrl = isVideo ? c?.video_url : current.url;
+          const mediaUrl = isVideo ? c?.video_url : lightboxImageUrl;
           const hasPrev = lightbox.index > 0;
           const hasNext = lightbox.index < lightbox.items.length - 1;
           return (
@@ -808,7 +812,7 @@ export default function GeneratedCreatives() {
                         exit={{ opacity: 0, scale: 0.97 }}
                         transition={{ duration: 0.14 }}
                         src={mediaUrl}
-                        poster={current.url}
+                        poster={lightboxImageUrl}
                         controls
                         autoPlay
                         onClick={(e) => e.stopPropagation()}
@@ -831,12 +835,12 @@ export default function GeneratedCreatives() {
                     )
                   ) : (
                     <motion.img
-                      key={current.url}
+                      key={current.id}
                       initial={{ opacity: 0, scale: 0.97 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.97 }}
                       transition={{ duration: 0.14 }}
-                      src={current.url}
+                      src={lightboxImageUrl}
                       alt={current.name}
                       onClick={(e) => e.stopPropagation()}
                       onLoad={(e) => setMediaDims({ w: e.target.naturalWidth, h: e.target.naturalHeight })}

@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { creativesApi, brandKitApi } from '../../lib/api';
 import { loadFabric } from '../../lib/loadFabric';
+import { loadCreativeImageUrl } from '../../lib/creativeUrl';
+import { CreativeImg } from '../ui/CreativeImg';
 
 const TEXT_COLORS = ['#FFFFFF', '#000000', '#2563EB', '#EF4444', '#F59E0B', '#10B981', '#A855F7'];
 
@@ -155,12 +157,6 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
   const savedHistoryIndexRef = useRef(-1);
   const isRestoringRef = useRef(false);
   const fileInputRef = useRef(null);
-
-  const creativeProxyUrl = (cid) => {
-    const token = localStorage.getItem('access_token');
-    const wsId = localStorage.getItem('active_workspace_id');
-    return `/api/creatives/${cid}/image/?token=${token}&workspace_id=${wsId}`;
-  };
 
   const isDirty = () => historyIndexRef.current !== savedHistoryIndexRef.current;
 
@@ -332,6 +328,11 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
     setActiveAngle(0);
   };
 
+  // Tracks the last blob: URL handed to Fabric so it can be released once a
+  // new one loads (or the pane unmounts) instead of leaking every time the
+  // editor re-loads its background image.
+  const bgImageUrlRef = useRef(null);
+
   // ── Load background image into a fresh Fabric canvas ──
   const loadCreativeImage = useCallback(() => {
     const canvas = fabricRef.current;
@@ -339,27 +340,35 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
     if (!canvas || !fabric || !creative) return;
     canvas.clear();
 
-    fabric.Image.fromURL(creativeProxyUrl(creative.id), (img) => {
-      const el = containerRef.current;
-      const availW = Math.max(200, (el?.clientWidth || 800) - 64);
-      const availH = Math.max(200, (el?.clientHeight || 600) - 64);
-      const scale = Math.min(availW / img.width, availH / img.height, 1);
-      const dispW = Math.round(img.width * scale);
-      const dispH = Math.round(img.height * scale);
-      canvas.setWidth(dispW);
-      canvas.setHeight(dispH);
-      canvas.setBackgroundImage(img, () => {
-        canvas.renderAll();
-        setCanvasDims({ w: dispW, h: dispH });
-        setCanvasReady(true);
-        bgInfoRef.current = { naturalW: img.width, naturalH: img.height };
-        historyRef.current = [];
-        historyIndexRef.current = -1;
-        pushHistory();
-        savedHistoryIndexRef.current = historyIndexRef.current;
-      }, { scaleX: scale, scaleY: scale });
-    }, { crossOrigin: 'anonymous' });
+    loadCreativeImageUrl(creative.id).then((url) => {
+      if (bgImageUrlRef.current) URL.revokeObjectURL(bgImageUrlRef.current);
+      bgImageUrlRef.current = url;
+      fabric.Image.fromURL(url, (img) => {
+        const el = containerRef.current;
+        const availW = Math.max(200, (el?.clientWidth || 800) - 64);
+        const availH = Math.max(200, (el?.clientHeight || 600) - 64);
+        const scale = Math.min(availW / img.width, availH / img.height, 1);
+        const dispW = Math.round(img.width * scale);
+        const dispH = Math.round(img.height * scale);
+        canvas.setWidth(dispW);
+        canvas.setHeight(dispH);
+        canvas.setBackgroundImage(img, () => {
+          canvas.renderAll();
+          setCanvasDims({ w: dispW, h: dispH });
+          setCanvasReady(true);
+          bgInfoRef.current = { naturalW: img.width, naturalH: img.height };
+          historyRef.current = [];
+          historyIndexRef.current = -1;
+          pushHistory();
+          savedHistoryIndexRef.current = historyIndexRef.current;
+        }, { scaleX: scale, scaleY: scale });
+      });
+    }).catch(() => setError('Failed to load image.'));
   }, [creative, pushHistory]);
+
+  useEffect(() => () => {
+    if (bgImageUrlRef.current) URL.revokeObjectURL(bgImageUrlRef.current);
+  }, []);
 
   // ── Init Fabric canvas once (Fabric.js itself loads on demand — see loadFabric) ──
   useEffect(() => {
@@ -504,21 +513,27 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
     const canvas = fabricRef.current;
     const { fabric } = window;
     if (!canvas || !fabric) return;
-    fabric.Image.fromURL(creativeProxyUrl(other.id), (img) => {
-      const maxDim = Math.min(canvas.getWidth(), canvas.getHeight()) * 0.55;
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      img.set({
-        left: canvas.getWidth() / 2, top: canvas.getHeight() / 2,
-        scaleX: scale, scaleY: scale, originX: 'center', originY: 'center',
+    loadCreativeImageUrl(other.id).then((url) => {
+      fabric.Image.fromURL(url, (img) => {
+        const maxDim = Math.min(canvas.getWidth(), canvas.getHeight()) * 0.55;
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        img.set({
+          left: canvas.getWidth() / 2, top: canvas.getHeight() / 2,
+          scaleX: scale, scaleY: scale, originX: 'center', originY: 'center',
+        });
+        img._layerType = 'image';
+        img._layerName = other.name || 'Creative';
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        canvas.renderAll();
+        syncControls(img);
+        pushHistory();
+        // This one is dropped straight onto the canvas as a layer (unlike
+        // the background image, no ref sticks around) — nothing else reads
+        // this object URL again, so it's safe to release right away.
+        URL.revokeObjectURL(url);
       });
-      img._layerType = 'image';
-      img._layerName = other.name || 'Creative';
-      canvas.add(img);
-      canvas.setActiveObject(img);
-      canvas.renderAll();
-      syncControls(img);
-      pushHistory();
-    }, { crossOrigin: 'anonymous' });
+    }).catch(() => setError('Failed to load image.'));
   };
 
   // ── Add Text ──
@@ -1079,7 +1094,7 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
         <div ref={containerRef} className="flex-1 flex items-center justify-center p-6 md:p-10 overflow-hidden relative">
           <div className="relative rounded-2xl overflow-hidden shadow-2xl"
             style={canvasReady ? { width: canvasDims.w, height: canvasDims.h } : { width: '100%', height: '100%' }}>
-            <img src={creativeProxyUrl(creative.id)} alt={creative.name}
+            <CreativeImg creativeId={creative.id} alt={creative.name}
               className="absolute inset-0 w-full h-full object-contain"
               style={{ opacity: canvasReady ? 0 : 1, transition: 'opacity 0.3s ease' }} />
             <canvas ref={canvasRef} style={{ opacity: canvasReady ? 1 : 0, transition: 'opacity 0.3s ease' }} />
@@ -1238,7 +1253,7 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
                       {otherCreatives.slice(0, 24).map(c => (
                         <button key={c.id} onClick={() => handleAddCreativeImage(c)}
                           className="aspect-4/5 rounded-lg overflow-hidden border border-white/6 hover:border-[color-mix(in_srgb,var(--accent)_40%,transparent)] transition-all">
-                          <img src={creativeProxyUrl(c.id)} className="w-full h-full object-cover" alt={c.name} loading="lazy" />
+                          <CreativeImg creativeId={c.id} className="w-full h-full object-cover" alt={c.name} loading="lazy" />
                         </button>
                       ))}
                     </div>

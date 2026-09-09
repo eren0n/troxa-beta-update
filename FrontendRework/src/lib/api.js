@@ -128,6 +128,52 @@ async function requestBlob(path) {
   return res.blob();
 }
 
+// Authenticated binary fetch with the same 401-refresh-retry as request()
+// above, minus the JSON handling — used for images/downloads that must be
+// fetched with a normal Authorization header instead of a token baked into
+// the URL (which would otherwise land in server access logs and browser
+// history on every request).
+async function fetchAuthedBlob(path) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const wsId = getWorkspaceId();
+  if (wsId) headers['X-Workspace-ID'] = wsId;
+
+  let res = await fetch(`${BASE}${path}`, { headers });
+
+  if (res.status === 401) {
+    if (isRefreshing) {
+      await new Promise((resolve) => refreshQueue.push(resolve));
+      headers['Authorization'] = `Bearer ${getToken()}`;
+      res = await fetch(`${BASE}${path}`, { headers });
+    } else {
+      isRefreshing = true;
+      try {
+        const newToken = await refreshToken();
+        headers['Authorization'] = `Bearer ${newToken}`;
+        refreshQueue.forEach((r) => r());
+        refreshQueue = [];
+        res = await fetch(`${BASE}${path}`, { headers });
+      } catch (e) {
+        refreshQueue = [];
+        clearTokens();
+        window.location.href = '/login';
+        throw e;
+      } finally {
+        isRefreshing = false;
+      }
+    }
+  }
+
+  if (!res.ok) throw new Error(`Image fetch failed: ${res.status}`);
+  return res.blob();
+}
+
+export function fetchCreativeImageBlob(id, { logo = false } = {}) {
+  return fetchAuthedBlob(`/creatives/${id}/image/${logo ? '?type=logo' : ''}`);
+}
+
 async function upload(path, formData, method = 'POST', _retry = false) {
   const headers = {};
   const token = getToken();

@@ -11,8 +11,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from apps.accounts.views import get_workspace, require_editor
 from apps.accounts.models import User
@@ -63,17 +61,6 @@ def _validate_source_image_url(url):
     return True, None
 
 
-class QueryParamJWTAuthentication(JWTAuthentication):
-    """Allow JWT via ?token= query param so <img> tags can authenticate."""
-    def authenticate(self, request):
-        token = request.query_params.get('token')
-        if not token:
-            return super().authenticate(request)
-        try:
-            validated = self.get_validated_token(token)
-            return self.get_user(validated), validated
-        except (InvalidToken, TokenError):
-            return None
 from apps.activity.utils import log_event
 from apps.brand_kit.models import Logo, Disclaimer, Campaign, Character
 from apps.billing.models import Subscription
@@ -739,13 +726,14 @@ class VideoJobProxyView(APIView):
 
 
 class CreativeImageProxyView(APIView):
-    authentication_classes = []
-    permission_classes = []
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        from apps.creatives.models import GeneratedCreative
         from django.http import FileResponse, HttpResponseRedirect
-        creative = GeneratedCreative.objects.filter(pk=pk).first()
+        ws = get_workspace(request)
+        if not ws:
+            return Response(status=404)
+        creative = ws.creatives.filter(pk=pk).first()
         if not creative:
             return Response(status=404)
 

@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Download, Maximize2, Star, StarHalf, MessageSquare, X, Video } from 'lucide-react';
 import { GLASS_STYLE } from '../ui/GlassCard';
-import { creativeProxyUrl } from '../../lib/creativeUrl';
+import { useCreativeImage } from '../../lib/creativeUrl';
+import { CreativeImg } from '../ui/CreativeImg';
 import TagBadge from './TagBadge';
 import TagPicker from './TagPicker';
 import InlineRename from './InlineRename';
@@ -11,7 +12,7 @@ import InlineRename from './InlineRename';
 // so this card intentionally has no edit actions — just preview, rate,
 // tag, comment, download, delete.
 //
-// `creative.image_url` (behind creativeProxyUrl) is the ORIGINAL source
+// `creative.image_url` (behind useCreativeImage) is the ORIGINAL source
 // photo the video was rendered from, not the video itself — the rendered
 // clip lives at `creative.video_url` (from the linked VideoJob). The source
 // photo makes a good poster frame while the clip loads or is still rendering.
@@ -23,6 +24,9 @@ export default function VideoCreativeCard({
 }) {
   const isRendering = creative.vjob_status === 'pending' || creative.vjob_status === 'processing';
   const isError = creative.vjob_status === 'error';
+  // Source photo used as the poster frame — a native <video poster> attribute
+  // can't carry an Authorization header, so this still needs the blob hook.
+  const posterUrl = useCreativeImage(creative.id);
   const isHoveringRating = hoverStar[creative.id] !== undefined;
   const activeRating = hoverStar[creative.id] ?? creative.rating ?? 0;
   const ratingLabel = isHoveringRating ? `${hoverStar[creative.id]}/10` : creative.rating > 0 ? `${creative.rating}/10` : '-/10';
@@ -61,10 +65,10 @@ export default function VideoCreativeCard({
         onClick={onOpenLightbox}
       >
         {creative.video_url ? (
-          <video ref={videoRef} src={creative.video_url} poster={creativeProxyUrl(creative.id)} muted loop playsInline preload="metadata"
+          <video ref={videoRef} src={creative.video_url} poster={posterUrl} muted loop playsInline preload="metadata"
             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-300" />
         ) : (
-          <img src={creativeProxyUrl(creative.id)}
+          <CreativeImg creativeId={creative.id}
             className="w-full h-full object-cover opacity-50"
             alt={creative.name} loading="lazy" decoding="async" />
         )}
