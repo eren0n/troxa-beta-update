@@ -219,8 +219,91 @@ def _bootstrap_free_trial(workspace, user):
     )
 
 
+GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo'
+GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
+
+
+def _verify_google_access_token(access_token):
+    """
+    Returns (email, None) for a token genuinely issued to *this* app, or
+    (None, error_response) explaining why it was rejected.
+
+    Handing the token to userinfo only proves it's valid for *some* Google
+    app — not for ours. Without an audience check, anyone running their own
+    "Sign in with Google" can collect a visitor's access token and replay it
+    here to be handed that person's session, so the token's audience has to
+    be pinned to our own client id before it counts as proof of identity.
+    """
+    client_id = (settings.GOOGLE_CLIENT_ID or '').strip()
+    if not client_id:
+        # Fail closed — without a client id to compare against there is no
+        # way to tell our tokens apart from anyone else's.
+        return None, Response(
+            {'detail': 'Google sign-in is not configured on this server.'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    try:
+        resp = http_requests.get(GOOGLE_TOKENINFO_URL, params={'access_token': access_token}, timeout=10)
+    except http_requests.RequestException:
+        return None, Response(
+            {'detail': 'Could not reach Google to verify the token.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    if not resp.ok:
+        return None, Response({'detail': 'Invalid Google token.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    info = resp.json()
+    # `aud` is the client the token was minted for; `azp` carries it instead
+    # on some browser-side flows. Either one matching ours is proof enough.
+    if client_id not in ((info.get('aud') or '').strip(), (info.get('azp') or '').strip()):
+        # Log the audience (never the token) so a legitimate sign-in broken
+        # by a client-id mismatch is diagnosable without a repro.
+        import logging
+        logging.getLogger(__name__).warning(
+            'google_auth.audience_mismatch aud=%r azp=%r expected=%r',
+            info.get('aud'), info.get('azp'), client_id,
+        )
+        return None, Response(
+            {'detail': 'This Google token was not issued for Troxa.'},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    # tokeninfo reports this as the string "true"/"false". Only reject an
+    # explicit negative — a missing field shouldn't lock anyone out.
+    if str(info.get('email_verified', 'true')).lower() == 'false':
+        return None, Response(
+            {'detail': 'Your Google e-mail address is not verified.'},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    email = info.get('email', '')
+    if not email:
+        # tokeninfo omits the e-mail when the token lacks the email scope —
+        # fall back to userinfo rather than failing the sign-in outright.
+        try:
+            ui = http_requests.get(
+                GOOGLE_USERINFO_URL,
+                headers={'Authorization': f'Bearer {access_token}'},
+                timeout=10,
+            )
+            email = ui.json().get('email', '') if ui.ok else ''
+        except http_requests.RequestException:
+            email = ''
+
+    if not email:
+        return None, Response(
+            {'detail': 'Could not retrieve email from Google.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    return email, None
+
+
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         import pyotp
@@ -230,18 +313,9 @@ class GoogleAuthView(APIView):
         if not access_token:
             return Response({'detail': 'Google access_token required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        resp = http_requests.get(
-            'https://www.googleapis.com/oauth2/v3/userinfo',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10,
-        )
-        if not resp.ok:
-            return Response({'detail': 'Invalid Google token.'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        userinfo = resp.json()
-        email = userinfo.get('email', '')
-        if not email:
-            return Response({'detail': 'Could not retrieve email from Google.'}, status=status.HTTP_400_BAD_REQUEST)
+        email, token_error = _verify_google_access_token(access_token)
+        if token_error:
+            return token_error
 
         # Block new registrations — closed beta
         try:
@@ -274,6 +348,7 @@ class GoogleAuthView(APIView):
 class GoogleLinkView(APIView):
     """Verify password then permanently link Google to the existing account."""
     permission_classes = [AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         access_token = request.data.get('access_token', '')
@@ -282,15 +357,10 @@ class GoogleLinkView(APIView):
         if not access_token or not password:
             return Response({'detail': 'access_token and password required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        resp = http_requests.get(
-            'https://www.googleapis.com/oauth2/v3/userinfo',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10,
-        )
-        if not resp.ok:
-            return Response({'detail': 'Invalid Google token.'}, status=status.HTTP_401_UNAUTHORIZED)
+        email, token_error = _verify_google_access_token(access_token)
+        if token_error:
+            return token_error
 
-        email = resp.json().get('email', '')
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
