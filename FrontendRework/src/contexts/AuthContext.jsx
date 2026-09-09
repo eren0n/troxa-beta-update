@@ -44,10 +44,13 @@ export function AuthProvider({ children }) {
     // The auth cookie is httpOnly — there's nothing client-readable to check
     // before deciding whether to even try. Just ask /me and let a 401 mean
     // "not logged in" (no session cookie, or it expired and the refresh
-    // cookie is gone/blacklisted too).
+    // cookie is gone/blacklisted too) — silent401 because this runs on
+    // *every* page including public ones (the homepage, /login itself);
+    // "not logged in" is the normal case there, not something to bounce the
+    // visitor out of the page they're already looking at for.
     (async () => {
       try {
-        const userData = await authApi.me();
+        const userData = await authApi.me({ silent401: true });
         setUser(userData);
         const wsData = await fetchWorkspaces();
         resolveActiveWorkspace(wsData);

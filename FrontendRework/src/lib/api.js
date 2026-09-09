@@ -49,6 +49,15 @@ async function refreshToken() {
 let isRefreshing = false;
 let refreshQueue = [];
 
+// A hard reload to /login when we're already sitting on /login just remounts
+// everything and re-triggers the exact same failed refresh — an infinite
+// loop for every signed-out visitor landing on the login page (bootstrap
+// always calls /me now, which 401s, which lands here). Only force the
+// navigation when it would actually go somewhere.
+function redirectToLogin() {
+  if (window.location.pathname !== '/login') window.location.href = '/login';
+}
+
 async function request(method, path, body, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...csrfHeader(method), ...opts.headers };
 
@@ -74,7 +83,12 @@ async function request(method, path, body, opts = {}) {
       } catch (e) {
         refreshQueue = [];
         clearTokens();
-        window.location.href = '/login';
+        // Not logged in is the normal, expected outcome for this call on a
+        // *public* page's bootstrap check (the homepage, /login itself) —
+        // forcing a redirect there is what sent every anonymous visitor to
+        // /login on landing. Only protected-page calls (the default) should
+        // treat "session is dead" as something to redirect out of.
+        if (!opts.silent401) redirectToLogin();
         throw e;
       } finally {
         isRefreshing = false;
@@ -151,7 +165,7 @@ async function fetchAuthedBlob(path) {
       } catch (e) {
         refreshQueue = [];
         clearTokens();
-        window.location.href = '/login';
+        redirectToLogin();
         throw e;
       } finally {
         isRefreshing = false;
@@ -219,7 +233,7 @@ export const authApi = {
   // meaningful) once JS can't read it in the first place.
   logout: () => request('POST', '/auth/logout/'),
   register: (data) => request('POST', '/auth/register/', data),
-  me: () => request('GET', '/users/me/'),
+  me: (opts) => request('GET', '/users/me/', undefined, opts),
   updateMe: (data) => request('PATCH', '/users/me/', data),
   uploadAvatar: (formData) => upload('/users/me/', formData, 'PATCH'),
   changePassword: (current_password, new_password) => request('POST', '/users/me/change-password/', { current_password, new_password }),
