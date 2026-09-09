@@ -1,4 +1,9 @@
 const FABRIC_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js';
+// Pinned to the 5.3.1 build served above — published by cdnjs itself
+// (api.cdnjs.com/libraries/fabric.js/5.3.1). If a compromised CDN response
+// doesn't hash-match this, the browser refuses to execute it instead of
+// silently running whatever came back.
+const FABRIC_INTEGRITY = 'sha512-CeIsOAsgJnmevfCi2C7Zsyy6bQKi43utIjdA87Q0ZY84oDqnI0uwfM9+bKiIkI75lUeI00WG/+uJzOmuHlesMA==';
 
 let fabricPromise = null;
 
@@ -12,6 +17,8 @@ export function loadFabric() {
   fabricPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = FABRIC_SRC;
+    script.integrity = FABRIC_INTEGRITY;
+    script.crossOrigin = 'anonymous';
     script.async = true;
     script.onload = () => resolve(window.fabric);
     script.onerror = () => {
