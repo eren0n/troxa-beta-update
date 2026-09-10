@@ -140,8 +140,19 @@ function invalidateGetCache(path) {
   getCache.delete(`${getWorkspaceId() || ''}::${path}`);
 }
 
+// Every workspace-scoped endpoint resolves the workspace from this header
+// and silently falls back to the user's *first* workspace without it — so a
+// binary GET that omits it 404s for anyone whose active workspace isn't
+// their oldest one. Same header request()/upload() send.
+function blobRequestInit() {
+  const headers = {};
+  const wsId = getWorkspaceId();
+  if (wsId) headers['X-Workspace-ID'] = wsId;
+  return { method: 'GET', headers, credentials: 'same-origin' };
+}
+
 async function requestBlob(path) {
-  const res = await fetch(`${BASE}${path}`, { method: 'GET', credentials: 'same-origin' });
+  const res = await fetch(`${BASE}${path}`, blobRequestInit());
   if (!res.ok) throw new Error('Export failed');
   return res.blob();
 }
@@ -149,19 +160,20 @@ async function requestBlob(path) {
 // Authenticated binary fetch with the same 401-refresh-retry as request()
 // above, minus the JSON handling — used for images/downloads.
 async function fetchAuthedBlob(path) {
-  let res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
+  const config = blobRequestInit();
+  let res = await fetch(`${BASE}${path}`, config);
 
   if (res.status === 401) {
     if (isRefreshing) {
       await new Promise((resolve) => refreshQueue.push(resolve));
-      res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
+      res = await fetch(`${BASE}${path}`, config);
     } else {
       isRefreshing = true;
       try {
         await refreshToken();
         refreshQueue.forEach((r) => r());
         refreshQueue = [];
-        res = await fetch(`${BASE}${path}`, { credentials: 'same-origin' });
+        res = await fetch(`${BASE}${path}`, config);
       } catch (e) {
         refreshQueue = [];
         clearTokens();
