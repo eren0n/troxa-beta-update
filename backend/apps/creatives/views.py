@@ -773,10 +773,17 @@ class CreativeImageProxyView(APIView):
 
     def get(self, request, pk):
         from django.http import FileResponse, HttpResponseRedirect
-        ws = get_workspace(request)
-        if not ws:
-            return Response(status=404)
-        creative = ws.creatives.filter(pk=pk).first()
+        # Deliberately NOT scoped to get_workspace(request)'s "active" workspace:
+        # plain <img src="/api/creatives/<id>/image/"> tags (Home's "Latest
+        # Creatives", any spot that isn't routed through the CreativeImg/blob
+        # helper) can't attach X-Workspace-ID, so that would silently fall
+        # back to the user's first-joined workspace and 404 every creative
+        # living anywhere else — which is exactly what broke Home yesterday.
+        # A creative is still only reachable by someone who's a member of the
+        # workspace that owns it, so this keeps the same IDOR boundary.
+        creative = GeneratedCreative.objects.filter(
+            pk=pk, workspace__members=request.user,
+        ).first()
         if not creative:
             return Response(status=404)
 
