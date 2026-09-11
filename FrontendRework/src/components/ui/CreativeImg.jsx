@@ -14,6 +14,15 @@ import { useCreativeImage } from '../../lib/creativeUrl';
  */
 export function CreativeImg({ creativeId, logo, ...imgProps }) {
   const url = useCreativeImage(creativeId, { logo });
-  if (!url) return <div className={imgProps.className} style={imgProps.style} />;
-  return <img src={url} {...imgProps} />;
+  // Always render an <img>, never swap to a <div> placeholder while loading.
+  // That swap changes the element *type* at this JSX position, so React
+  // unmounts/remounts a DOM node here on every load — harmless on its own,
+  // but next to a Fabric.js canvas (CreativeEditorPane) it races Fabric's
+  // own DOM surgery (wrapping the canvas in its own container as soon as
+  // it initializes) and throws "insertBefore: node is not a child of this
+  // node", which crashes the whole React tree with no error boundary to
+  // catch it — the "opens then glitches to a black/white screen" the Edit
+  // tab hit. Passing `undefined` (not '') for a missing url omits the src
+  // attribute entirely, so there's no broken-image icon while it loads.
+  return <img src={url || undefined} {...imgProps} />;
 }
