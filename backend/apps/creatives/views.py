@@ -998,6 +998,16 @@ class SaveCanvasView(APIView):
             is_edited=True,
             in_gallery=True,
         )
+        # Point uploaded_file at the file we just wrote so
+        # CreativeImageProxyView serves it straight from disk (same path as
+        # a regular upload) instead of self-HTTP-fetching `image_url` — that
+        # fetch is one more thing that can go wrong (e.g. a scheme mismatch
+        # from a misconfigured reverse proxy sending back http:// instead
+        # of https://, which is what left saved edits stuck loading forever
+        # in the editor). The file's already on disk at `path`; this just
+        # points the field at it without re-saving/re-encoding.
+        creative.uploaded_file.name = path
+        creative.save(update_fields=['uploaded_file'])
 
         try:
             from apps.slack_integration.services import notify_slack_edit

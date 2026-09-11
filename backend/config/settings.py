@@ -26,6 +26,18 @@ SECURE_HSTS_SECONDS = 31536000          # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
+# nginx terminates TLS and proxies to gunicorn over plain HTTP (see
+# proxy_params' X-Forwarded-Proto), so without this Django has no way to
+# know the original request was HTTPS — request.is_secure() is always
+# False, and anything built from request.build_absolute_uri() (notably
+# SaveCanvasView's stored image_url for "save to gallery" edits) comes out
+# as http://troxa.ai/... instead of https://. The self-referencing image
+# proxy then requests that http:// URL, gets redirected to https, and the
+# combination hangs the canvas editor's background-image load forever
+# (Fabric never fires onload for a URL it never resolves) — the "0 x 0 px"
+# blank-canvas bug.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # CSRF cookie — this one stays JS-readable (httponly=False) on purpose: the
 # frontend reads it to echo back as the X-CSRFToken header on mutating
 # requests, per Django's double-submit-cookie pattern. It's a per-session
