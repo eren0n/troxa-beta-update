@@ -22,11 +22,17 @@ import { useCreativeImage } from '../../lib/creativeUrl';
  * item's preview) rather than an off-screen grid thumbnail — those should
  * still start loading the instant they mount.
  *
+ * While waiting on either the visibility gate or the fetch itself, the
+ * element shows the same shimmering gradient as CreativeGridSkeleton instead
+ * of sitting there as a flat, static black box — the upstream fetch this
+ * proxies (fal.media, Google Drive, ...) routinely takes a couple of
+ * seconds, and a shimmer at least reads as "loading" instead of "broken".
+ *
  * Props: `creativeId` (required), `logo` (optional, for the logo-applied
  * variant), `eager` (optional, skip the visibility gate), plus anything else
  * forwarded straight to the underlying <img> (className, alt, onLoad, ...).
  */
-export function CreativeImg({ creativeId, logo, eager = false, ...imgProps }) {
+export function CreativeImg({ creativeId, logo, eager = false, className = '', style, ...imgProps }) {
   const imgRef = useRef(null);
   const [inView, setInView] = useState(eager);
 
@@ -51,8 +57,25 @@ export function CreativeImg({ creativeId, logo, eager = false, ...imgProps }) {
   }, [eager, inView]);
 
   const url = useCreativeImage(inView ? creativeId : null, { logo });
+  const loading = !url;
+
   // Always render an <img>, never swap to a <div> placeholder while loading —
   // passing `undefined` (not '') for a missing url omits the src attribute
-  // entirely, so there's no broken-image icon while it loads.
-  return <img ref={imgRef} src={url || undefined} {...imgProps} />;
+  // entirely, so there's no broken-image icon while it loads; the shimmer is
+  // just the <img>'s own CSS background showing through until it does.
+  return (
+    <img
+      ref={imgRef}
+      src={url || undefined}
+      className={`${className} ${loading ? 'animate-shimmer' : ''}`}
+      style={{
+        ...(loading ? {
+          background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.04) 75%)',
+          backgroundSize: '200% 100%',
+        } : null),
+        ...style,
+      }}
+      {...imgProps}
+    />
+  );
 }

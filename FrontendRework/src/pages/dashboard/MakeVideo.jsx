@@ -137,8 +137,10 @@ export default function MakeVideo() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left – Source Image Picker */}
-        <div style={GLASS_STYLE} className="flex-1 rounded-2xl overflow-hidden flex flex-col min-h-96 w-full">
+        {/* Left – Source Image Picker — below lg this has an infinite-scroll
+            grid that can grow indefinitely, so it renders *after* the
+            settings panel there (order-2), same fix as Generate. */}
+        <div style={GLASS_STYLE} className="flex-1 rounded-2xl overflow-hidden flex flex-col min-h-96 w-full order-2 lg:order-1">
           <div className="px-6 py-4 border-b border-white/5 flex items-center gap-3">
             <ImageIcon className="w-4 h-4 text-slate-500" />
             <h2 className="font-black text-white text-sm">Source Image</h2>
@@ -232,7 +234,7 @@ export default function MakeVideo() {
         </div>
 
         {/* Right – Video Settings Panel */}
-        <div className="w-full lg:w-96 space-y-4">
+        <div className="w-full lg:w-96 space-y-4 order-1 lg:order-2">
           {/* Preview */}
           <div style={GLASS_STYLE} className="rounded-2xl overflow-hidden">
             {selected ? (
