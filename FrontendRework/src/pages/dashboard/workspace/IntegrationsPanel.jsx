@@ -307,15 +307,15 @@ function SlackCard({ activeWorkspace }) {
   const existingChannelIds = new Set(channels.map(c => c.channel_id));
 
   return (
-    <div style={GLASS_STYLE} className="rounded-3xl p-8 space-y-6">
+    <div style={GLASS_STYLE} className="rounded-3xl p-5 sm:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] flex items-center justify-center text-(--accent)">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] flex items-center justify-center text-(--accent) shrink-0">
             <SlackIcon />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-bold text-white">Slack</p>
               {!loading && status?.connected && (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
@@ -839,15 +839,15 @@ function DriveCard({ activeWorkspace }) {
 
   return (
     <>
-      <div style={GLASS_STYLE} className="rounded-3xl p-8 space-y-6">
+      <div style={GLASS_STYLE} className="rounded-3xl p-5 sm:p-8 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
               <DriveIcon />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm font-bold text-white">Google Drive</p>
                 {!loading && status?.connected && (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
@@ -1127,15 +1127,15 @@ function MetaCard({ activeWorkspace }) {
   const step3Done = !!status?.page_id;
 
   return (
-    <div style={GLASS_STYLE} className="rounded-3xl p-8 space-y-6">
+    <div style={GLASS_STYLE} className="rounded-3xl p-5 sm:p-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#1877F2]/10 border border-[#1877F2]/20 flex items-center justify-center text-[#1877F2]">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#1877F2]/10 border border-[#1877F2]/20 flex items-center justify-center text-[#1877F2] shrink-0">
             <MetaIcon />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-bold text-white">Meta Ads</p>
               {!loading && step3Done && (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">

@@ -1049,7 +1049,7 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:shrink-0">
           {error && (
             <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-xl">
               <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
@@ -1088,13 +1088,15 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Below lg the tools panel can't sit beside the canvas (fixed 320px
+          would leave almost nothing for it) — stack panel under canvas instead. */}
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
 
         {/* ── Left: hero canvas ── */}
-        <div ref={containerRef} className="flex-1 flex items-center justify-center p-6 md:p-10 overflow-hidden relative">
+        <div ref={containerRef} className="flex-1 flex items-center justify-center p-6 md:p-10 overflow-hidden relative max-lg:min-h-[40vh]">
           <div className="relative rounded-2xl overflow-hidden shadow-2xl"
             style={canvasReady ? { width: canvasDims.w, height: canvasDims.h } : { width: '100%', height: '100%' }}>
-            <CreativeImg creativeId={creative.id} alt={creative.name}
+            <CreativeImg creativeId={creative.id} alt={creative.name} eager
               className="absolute inset-0 w-full h-full object-contain"
               style={{ opacity: canvasReady ? 0 : 1, transition: 'opacity 0.3s ease' }} />
             <canvas ref={canvasRef} style={{ opacity: canvasReady ? 1 : 0, transition: 'opacity 0.3s ease' }} />
@@ -1124,8 +1126,8 @@ export default function CreativeEditorPane({ creativeId, onClose, onSaved }) {
         <motion.div
           initial={{ x: 32, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
           transition={{ delay: 0.15, type: 'spring', stiffness: 300, damping: 32 }}
-          className="w-80 shrink-0 flex flex-col overflow-hidden"
-          style={{ borderLeft: '1px solid var(--border-subtle)' }}>
+          className="w-full lg:w-80 shrink-0 flex flex-col overflow-hidden max-lg:max-h-[45vh] max-lg:overflow-y-auto border-t lg:border-t-0 lg:border-l"
+          style={{ borderColor: 'var(--border-subtle)' }}>
 
           {/* Tool tabs */}
           <div className="flex gap-1 p-2 border-b" style={{ borderColor: 'var(--border-subtle)' }}>

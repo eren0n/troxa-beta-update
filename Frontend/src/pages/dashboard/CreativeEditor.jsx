@@ -40,7 +40,7 @@ export default function CreativeEditor() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-160px)] gap-4">
+    <div className="flex flex-col h-[calc(100dvh-160px)] gap-4">
       {/* Toolbar */}
       <div className="flex items-center justify-between p-3 bg-[#0b0e1a] border border-white/6 rounded-2xl gap-4">
         <div className="flex items-center gap-3">
@@ -85,10 +85,12 @@ export default function CreativeEditor() {
         </div>
       </div>
 
-      {/* Three-panel layout */}
-      <div className="flex-1 flex gap-4 overflow-hidden min-h-0">
+      {/* Three-panel layout — below lg the two 256/288px side panels don't
+          leave room for a usable canvas, so stack them instead, each capped
+          and independently scrollable so the canvas keeps most of the height. */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden min-h-0">
         {/* Left Panel */}
-        <div className="w-64 flex flex-col gap-3 overflow-y-auto">
+        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-3 overflow-y-auto max-lg:max-h-[30vh]">
           {/* Panel tabs */}
           <div className="flex gap-1 p-1 bg-[#0b0e1a] border border-white/6 rounded-xl">
             {[
@@ -144,7 +146,7 @@ export default function CreativeEditor() {
         </div>
 
         {/* Center – Canvas */}
-        <div className="flex-1 bg-[#0b0e1a] border border-white/6 rounded-2xl relative flex items-center justify-center overflow-hidden">
+        <div className="flex-1 bg-[#0b0e1a] border border-white/6 rounded-2xl relative flex items-center justify-center overflow-hidden max-lg:min-h-[35vh]">
           {/* Canvas controls */}
           <div className="absolute top-4 left-4 flex gap-1.5">
             <button className="p-1.5 bg-black/50 backdrop-blur-md border border-white/8 rounded-lg text-slate-500 hover:text-white transition-all">
@@ -195,7 +197,7 @@ export default function CreativeEditor() {
         </div>
 
         {/* Right Panel */}
-        <div className="w-72 flex flex-col gap-3 overflow-y-auto">
+        <div className="w-full lg:w-72 shrink-0 flex flex-col gap-3 overflow-y-auto max-lg:max-h-[30vh]">
           {/* Core Logic */}
           <div className="bg-[#0b0e1a] border border-white/6 rounded-2xl p-5 space-y-5">
             <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-widest flex items-center gap-2">

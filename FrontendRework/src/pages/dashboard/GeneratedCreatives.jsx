@@ -13,6 +13,7 @@ import { useGeneration } from '../../contexts/GenerationContext';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
 import { useCreativeImage } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 import { getPortalRoot } from '../../lib/portalRoot';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import UploadCreativeButton from '../../components/dashboard/UploadCreativeButton';
@@ -1060,7 +1061,7 @@ export default function GeneratedCreatives() {
                       <div className="flex flex-wrap gap-2">
                         {c.reference_thumbs.map((ref, ri) => (
                           <div key={ri} className="w-14 h-14 rounded-lg overflow-hidden bg-(--bg-hover) border border-(--border-subtle) shrink-0">
-                            <img src={ref.url} alt={ref.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                            <CreativeImg creativeId={ref.id} alt={ref.name} className="w-full h-full object-cover" />
                           </div>
                         ))}
                       </div>

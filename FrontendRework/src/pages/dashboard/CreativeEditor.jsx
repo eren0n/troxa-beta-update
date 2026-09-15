@@ -19,7 +19,7 @@ export default function CreativeEditor() {
       data-ui-design={uiDesign}
       style={{ background: 'var(--bg-page)' }}
     >
-      <div className="flex-1 rounded-3xl overflow-hidden" style={{ ...GLASS_STYLE, height: 'calc(100vh - 24px)' }}>
+      <div className="flex-1 rounded-3xl overflow-hidden" style={{ ...GLASS_STYLE, height: 'calc(100dvh - 24px)' }}>
         <CreativeEditorPane creativeId={id} onClose={() => navigate('/dashboard/gallery')} />
       </div>
     </div>

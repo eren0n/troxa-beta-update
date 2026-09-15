@@ -133,6 +133,16 @@ async function requestBlob(path, opts = {}) {
   return res.blob();
 }
 
+// Authenticated binary fetch for creative images — replaces the old
+// `creativeProxyUrl()` string-builder some pages used, which put the raw
+// access token (and workspace id) straight into the URL as
+// `?token=...&workspace_id=...`, leaking into nginx access logs, browser
+// history and any Referer header. The token now only ever travels as a
+// normal `Authorization` header, exactly like every other API call.
+export function fetchCreativeImageBlob(id, { logo = false } = {}) {
+  return requestBlob(`/creatives/${id}/image/${logo ? '?type=logo' : ''}`);
+}
+
 async function upload(path, formData, method = 'POST') {
   const headers = {};
   const token = getToken();

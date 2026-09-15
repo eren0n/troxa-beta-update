@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../../contexts/AuthContext';
 import { creativesApi, brandKitApi, activityApi } from '../../lib/api';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 
 const weekData = [
   { day: 'Mon', gen: 0, exp: 0 },
@@ -387,8 +388,9 @@ export default function DashboardHome() {
                     transition={{ delay: 0.1 + i * 0.07 }}
                     className="group relative aspect-square rounded-xl overflow-hidden bg-white/4 border border-white/6 cursor-pointer"
                   >
-                    <img
-                      src={c.logo_applied_url || c.image_url}
+                    <CreativeImg
+                      creativeId={c.id}
+                      logo
                       alt={c.prompt?.slice(0, 30) || 'Creative'}
                       className="w-full h-full object-cover opacity-60 group-hover:opacity-90 group-hover:scale-105 transition-all duration-500"
                     />

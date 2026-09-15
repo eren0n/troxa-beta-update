@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { creativesApi } from '../../lib/api';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 
 // Launchpad — every generation/editing tool gets a card here so Home reads
 // as "start something" rather than a stats dashboard. Feature-gated cards
@@ -173,8 +174,8 @@ export default function DashboardHome() {
                   transition={{ delay: 0.05 * i }}
                   className="group relative aspect-square rounded-xl overflow-hidden bg-white/4 border border-white/6 cursor-pointer"
                 >
-                  <img
-                    src={c.proxy_url || c.image_url}
+                  <CreativeImg
+                    creativeId={c.id}
                     alt={c.prompt?.slice(0, 30) || 'Creative'}
                     className="w-full h-full object-cover opacity-60 group-hover:opacity-90 group-hover:scale-105 transition-all duration-500"
                   />

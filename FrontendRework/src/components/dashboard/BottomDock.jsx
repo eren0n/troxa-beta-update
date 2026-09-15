@@ -94,7 +94,15 @@ export const BottomDock = () => {
   const [hovered, setHovered] = useState(null);
   const [btnHovered, setBtnHovered] = useState(false);
 
-  const isVisible = pinned || hoverVisible;
+  // Auto-hide is a hover gesture — there's no hover on a touchscreen, so a
+  // device with no fine pointer always behaves as pinned (and doesn't get
+  // the pin/auto-hide toggle, which would otherwise do nothing visible).
+  const [isTouch] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(hover: none), (pointer: coarse)').matches
+  );
+  const effectivePinned = pinned || isTouch;
+
+  const isVisible = effectivePinned || hoverVisible;
 
   const togglePin = () => {
     const next = !pinned;
@@ -118,17 +126,20 @@ export const BottomDock = () => {
       - When auto-hide: pointer-events-auto + fixed height = hover trigger zone
     */
     <div
-      className="fixed bottom-0 inset-x-0 flex justify-center items-end pb-5 px-3 z-50"
+      className="fixed bottom-0 inset-x-0 flex justify-center items-end px-3 z-50"
       style={{
-        height:        pinned ? 'auto' : 80,
-        pointerEvents: pinned ? 'none' : 'auto',
+        height:        effectivePinned ? 'auto' : 80,
+        pointerEvents: effectivePinned ? 'none' : 'auto',
+        // 1.25rem base gap plus the iOS home-indicator safe area, so the dock
+        // never sits under it on a notched phone.
+        paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))',
       }}
-      onMouseEnter={() => !pinned && setHoverVisible(true)}
-      onMouseLeave={() => !pinned && setHoverVisible(false)}
+      onMouseEnter={() => !effectivePinned && setHoverVisible(true)}
+      onMouseLeave={() => !effectivePinned && setHoverVisible(false)}
     >
       {/* Hint bar — visible when auto-hide and not hovering */}
       <AnimatePresence>
-        {!pinned && !hoverVisible && (
+        {!effectivePinned && !hoverVisible && (
           <motion.div
             key="hint"
             initial={{ opacity: 0, scaleX: 0.4 }}
@@ -150,16 +161,20 @@ export const BottomDock = () => {
             <motion.nav
               key="dock"
               aria-label="Main navigation"
-              initial={{ y: pinned ? 0 : 28, opacity: pinned ? 1 : 0 }}
+              initial={{ y: effectivePinned ? 0 : 28, opacity: effectivePinned ? 1 : 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 20, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-              className="flex items-center gap-0.5 px-2.5 py-2"
-              style={DOCK_STYLE}
+              // Below sm the dock's intrinsic width (~9 icons + dividers) can
+              // exceed the viewport — let it scroll horizontally there instead
+              // of clipping icons off-screen; desktop is untouched since it
+              // already fits and this only engages when content overflows.
+              className="flex items-center gap-0.5 px-2.5 py-2 max-w-[calc(100vw-1.5rem)] overflow-x-auto max-sm:[&::-webkit-scrollbar]:hidden"
+              style={{ ...DOCK_STYLE, WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}
             >
               {/* ── Nav groups ── */}
               {groups.map((group, gi) => (
-                <div key={gi} className="flex items-center gap-0.5">
+                <div key={gi} className="flex items-center gap-0.5 shrink-0">
                   {gi > 0 && (
                     <div
                       className="mx-1.5 h-5 w-px rounded-full shrink-0"
@@ -188,7 +203,7 @@ export const BottomDock = () => {
                     return (
                       <div
                         key={item.path}
-                        className="relative"
+                        className="relative shrink-0"
                         onMouseEnter={() => { setHovered(item.path); preloadDashboardRoute(item.path); }}
                         onMouseLeave={() => setHovered(null)}
                       >
@@ -250,8 +265,10 @@ export const BottomDock = () => {
                 </div>
               ))}
 
-              {/* ── Toggle (pin / auto-hide) button ── */}
-              <div className="ml-1.5 flex items-center">
+              {/* ── Toggle (pin / auto-hide) button — hidden on touch, where
+                    auto-hide has no way to reveal itself without a hover ── */}
+              {!isTouch && (
+              <div className="ml-1.5 flex items-center shrink-0">
                 <div className="w-px h-5 mr-2 shrink-0" style={{ background: 'var(--border-subtle)' }} />
 
                 <div
@@ -334,6 +351,7 @@ export const BottomDock = () => {
                   </motion.button>
                 </div>
               </div>
+              )}
             </motion.nav>
           )}
         </AnimatePresence>

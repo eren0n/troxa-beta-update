@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { automationApi, brandKitApi } from '../../lib/api';
 import LockedFeature from '../../components/dashboard/LockedFeature';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 
 // ─── Shared constants (mirrors GenerateCreatives) ────────────────────────────
 
@@ -382,7 +383,7 @@ function AutomationPage() {
                   <div className="grid grid-cols-3 gap-1.5">
                     {brandKitStatics.filter(s => selectedPipeline.static_ids.includes(s.id)).map(s => (
                       <div key={s.id} className="aspect-square rounded-lg overflow-hidden bg-white/4 border border-white/6">
-                        <img src={s.url} alt={s.name} className="w-full h-full object-cover" />
+                        <CreativeImg creativeId={s.id} alt={s.name} className="w-full h-full object-cover" />
                       </div>
                     ))}
                   </div>
@@ -411,7 +412,7 @@ function AutomationPage() {
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                   {allCreatives.map((c, i) => (
                     <div key={c.id ?? i} className="aspect-4/5 bg-white/4 border border-white/6 rounded-xl overflow-hidden">
-                      <img src={c.logo_applied_url || c.image_url} alt={`Creative ${i + 1}`} className="w-full h-full object-cover" />
+                      <CreativeImg creativeId={c.id} logo alt={`Creative ${i + 1}`} className="w-full h-full object-cover" />
                     </div>
                   ))}
                 </div>
@@ -639,7 +640,7 @@ function AutomationPage() {
                             <motion.div key={item.id} onClick={() => toggleStatic(item.id)}
                               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                               className={`group relative rounded-xl overflow-hidden aspect-4/5 cursor-pointer border-2 transition-all ${selected ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-transparent hover:border-white/15'}`}>
-                              <img src={item.image_url || item.url}
+                              <CreativeImg creativeId={item.id}
                                 className={`w-full h-full object-cover transition-all duration-400 ${selected ? 'opacity-90' : 'opacity-50 grayscale group-hover:opacity-80 group-hover:grayscale-0'}`}
                                 alt={item.name} />
                               <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent" />

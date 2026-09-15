@@ -237,7 +237,7 @@ export default function MakeVideo() {
           <div style={GLASS_STYLE} className="rounded-2xl overflow-hidden">
             {selected ? (
               <div className="relative h-44 bg-black">
-                <CreativeImg creativeId={selected.creative.id} className="w-full h-full object-cover opacity-70" alt={selected.name} />
+                <CreativeImg creativeId={selected.creative.id} eager className="w-full h-full object-cover opacity-70" alt={selected.name} />
                 <div className="absolute inset-0 bg-linear-to-t from-black via-black/40 to-transparent" />
                 <div className="absolute top-3 right-3 flex items-center gap-1.5">
                   <TagPicker

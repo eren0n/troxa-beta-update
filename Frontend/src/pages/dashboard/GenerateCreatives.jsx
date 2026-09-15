@@ -522,8 +522,10 @@ export default function GenerateCreatives() {
       </AnimatePresence>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left – Reference Photo Grid */}
-        <div className="flex-1 bg-[#0b0e1a] border border-white/6 rounded-2xl overflow-hidden flex flex-col min-h-96">
+        {/* Left – Reference Photo Grid — below lg, render after the settings
+            panel (order-2) so a long photo grid doesn't push settings out of
+            reach on a phone. */}
+        <div className="flex-1 bg-[#0b0e1a] border border-white/6 rounded-2xl overflow-hidden flex flex-col min-h-96 order-2 lg:order-1">
           <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Image className="w-4 h-4 text-slate-500" />
@@ -611,7 +613,7 @@ export default function GenerateCreatives() {
         </div>
 
         {/* Right – Settings Panel */}
-        <div className="w-full lg:w-96 space-y-4">
+        <div className="w-full lg:w-96 space-y-4 order-1 lg:order-2">
           {/* Mode Switcher */}
           <div className="bg-[#0b0e1a] border border-white/6 rounded-2xl p-1.5 flex gap-1.5">
             {[{ key: 'auto', label: 'Auto', Icon: Wand2 }, { key: 'custom', label: 'Custom', Icon: Sliders }].map(({ key, label, Icon }) => (

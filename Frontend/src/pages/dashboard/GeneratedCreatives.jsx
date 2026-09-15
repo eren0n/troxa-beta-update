@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { creativesApi, brandKitApi } from '../../lib/api';
+import { useCreativeImage, downloadCreativeImage } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 
 const DEFAULT_VIDEO_PROMPT = 'Smooth cinematic motion, slow zoom in, high quality, photorealistic';
 
@@ -44,11 +46,11 @@ export default function GeneratedCreatives() {
 
   const pollingIntervals = useRef({});
 
-  const creativeProxyUrl = (id) => {
-    const token = localStorage.getItem('access_token');
-    const wsId = localStorage.getItem('active_workspace_id');
-    return `/api/creatives/${id}/image/?token=${token}&workspace_id=${wsId}`;
-  };
+  // The lightbox image (also used as the video poster frame) needs the
+  // auth-header blob fetch too — resolved once for whichever item is
+  // currently shown, rather than eagerly for every item when it opens.
+  const lightboxCreative = lightbox?.items[lightbox.index]?.creative;
+  const lightboxImageUrl = useCreativeImage(lightboxCreative?.id);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -556,9 +558,9 @@ export default function GeneratedCreatives() {
                   }`}>
                   <div
                     className={`relative bg-black overflow-hidden shrink-0 ${view === 'grid' ? 'aspect-[4/5] w-full' : 'w-28 aspect-[4/5] rounded-xl'}`}
-                    onClick={() => setLightbox({ items: filteredCreatives.map(c => ({ url: creativeProxyUrl(c.id), name: c.name, creative: c })), index: filteredCreatives.indexOf(creative) })}
+                    onClick={() => setLightbox({ items: filteredCreatives.map(c => ({ name: c.name, creative: c })), index: filteredCreatives.indexOf(creative) })}
                   >
-                    <img src={creativeProxyUrl(creative.id)}
+                    <CreativeImg creativeId={creative.id}
                       className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-300"
                       alt={creative.name} />
 
@@ -621,11 +623,11 @@ export default function GeneratedCreatives() {
                             className="flex-1 py-2 bg-white hover:bg-blue-600 text-black hover:text-white font-bold text-[10px] text-center uppercase tracking-widest rounded-lg transition-colors">
                             Edit Logo
                           </button>
-                          <a href={creativeProxyUrl(creative.id)} download={`${creative.name || creative.id}.jpg`}
-                            onClick={(e) => e.stopPropagation()}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); downloadCreativeImage(creative.id, `${creative.name || creative.id}.jpg`); }}
                             className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors" title="Download">
                             <Download className="w-3.5 h-3.5" />
-                          </a>
+                          </button>
                         </div>
                         {creative.media_type === 'Photo' && (
                           <button onClick={(e) => { e.stopPropagation(); openVideoModal(creative); }} disabled={isRendering}
@@ -892,12 +894,12 @@ export default function GeneratedCreatives() {
 
                 <AnimatePresence mode="wait">
                   <motion.img
-                    key={current.url}
+                    key={lightboxImageUrl}
                     initial={{ opacity: 0, scale: 0.97 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.97 }}
                     transition={{ duration: 0.14 }}
-                    src={current.url}
+                    src={lightboxImageUrl || undefined}
                     alt={current.name}
                     className="max-h-[92vh] max-w-full object-contain rounded-xl shadow-2xl"
                   />
@@ -1003,7 +1005,7 @@ export default function GeneratedCreatives() {
                       <div className="flex flex-wrap gap-2">
                         {c.reference_thumbs.map((ref, ri) => (
                           <div key={ri} className="w-14 h-14 rounded-lg overflow-hidden bg-white/5 border border-white/8 shrink-0">
-                            <img src={ref.url} alt={ref.name} className="w-full h-full object-cover" />
+                            <CreativeImg creativeId={ref.id} alt={ref.name} className="w-full h-full object-cover" />
                           </div>
                         ))}
                       </div>
@@ -1025,9 +1027,9 @@ export default function GeneratedCreatives() {
                 {/* Download */}
                 <div className="p-4 border-t border-white/6">
                   <a
-                    href={current.url}
+                    href={lightboxImageUrl || undefined}
                     download={`${current.name || 'creative'}.jpg`}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/10 border border-white/8 text-white text-xs font-bold rounded-xl transition-colors"
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/10 border border-white/8 text-white text-xs font-bold rounded-xl transition-colors ${!lightboxImageUrl ? 'opacity-40 pointer-events-none' : ''}`}
                   >
                     <Download className="w-3.5 h-3.5" /> Download
                   </a>

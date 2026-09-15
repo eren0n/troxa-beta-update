@@ -172,8 +172,12 @@ class GeneratedCreativeSerializer(serializers.ModelSerializer):
     def get_reference_thumbs(self, obj):
         if not obj.job:
             return []
+        # Reference creatives are full GeneratedCreative records themselves
+        # (see model docstring) — route them through the same workspace-scoped
+        # proxy as every other creative image instead of handing out the raw,
+        # unauthenticated source URL directly.
         return [
-            {'name': ref.name, 'url': ref.image_url}
+            {'id': ref.id, 'name': ref.name, 'url': f'/api/creatives/{ref.id}/image/'}
             for ref in obj.job.reference_creatives.all()
             if ref.image_url
         ]

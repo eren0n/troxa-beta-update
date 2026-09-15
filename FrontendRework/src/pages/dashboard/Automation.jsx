@@ -1309,7 +1309,7 @@ function AutomationPage() {
                   <div className="grid grid-cols-3 gap-1.5">
                     {brandKitStatics.filter(s => selectedPipeline.static_ids.includes(s.id)).map(s => (
                       <div key={s.id} className="aspect-square rounded-lg overflow-hidden bg-white/4 border border-white/6">
-                        <img src={s.image_url || s.url} alt={s.name} className="w-full h-full object-cover" />
+                        <CreativeImg creativeId={s.id} alt={s.name} className="w-full h-full object-cover" />
                       </div>
                     ))}
                   </div>
@@ -1338,7 +1338,7 @@ function AutomationPage() {
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                   {allCreatives.map((c, i) => (
                     <div key={c.id ?? i} className="aspect-4/5 bg-white/4 border border-white/6 rounded-xl overflow-hidden">
-                      <img src={c.proxy_url || c.image_url} alt={`Creative ${i + 1}`} className="w-full h-full object-cover" />
+                      <CreativeImg creativeId={c.id} alt={`Creative ${i + 1}`} className="w-full h-full object-cover" />
                     </div>
                   ))}
                 </div>

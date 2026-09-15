@@ -206,9 +206,18 @@ class JobDetailView(APIView):
 
     def get(self, request, pk):
         ws = get_workspace(request)
-        try:
-            job = ws.generation_jobs.prefetch_related('creatives').get(pk=pk)
-        except GenerationJob.DoesNotExist:
+        job = ws.generation_jobs.prefetch_related('creatives').filter(pk=pk).first() if ws else None
+        if not job:
+            # Same class of bug as CreativeDetailView above: get_workspace()
+            # is the caller's *active* workspace (falling back to their
+            # oldest-joined one), not necessarily the one that owns this job
+            # — e.g. Logo Editor opened for a creative in a non-active
+            # workspace. A read is safe to widen to "any workspace I'm a
+            # member of".
+            job = GenerationJob.objects.prefetch_related('creatives').filter(
+                pk=pk, workspace__members=request.user,
+            ).first()
+        if not job:
             return Response(status=404)
         return Response(GenerationJobSerializer(job).data)
 
@@ -510,7 +519,20 @@ class CreativeDetailView(APIView):
 
     def get(self, request, pk):
         ws = get_workspace(request)
-        creative = self._get(ws, pk)
+        creative = self._get(ws, pk) if ws else None
+        if not creative:
+            # Same class of bug the image proxy had (see
+            # CreativeImageProxyView's comment): get_workspace() resolves the
+            # caller's *active* workspace, falling back to their oldest-joined
+            # one if the header is missing/stale. A direct link to a creative
+            # that lives in a different workspace than whichever one happens
+            # to be active — the Edit button on a gallery card, a bookmarked
+            # /dashboard/editor/:id, a stale tab after switching workspaces —
+            # 404'd here even though the requester is a legitimate member of
+            # the workspace that owns it, which is why "Edit" only ever
+            # loaded images for creatives in the user's default workspace.
+            # A read is safe to widen to "any workspace I'm a member of".
+            creative = GeneratedCreative.objects.filter(pk=pk, workspace__members=request.user).first()
         if not creative:
             return Response(status=404)
         return Response(GeneratedCreativeSerializer(creative).data)
@@ -612,9 +634,11 @@ class VideoJobDetailView(APIView):
 
     def get(self, request, pk):
         ws = get_workspace(request)
-        try:
-            vjob = ws.video_jobs.get(pk=pk)
-        except VideoJob.DoesNotExist:
+        vjob = ws.video_jobs.filter(pk=pk).first() if ws else None
+        if not vjob:
+            # Same class of bug as CreativeDetailView/JobDetailView above.
+            vjob = VideoJob.objects.filter(pk=pk, workspace__members=request.user).first()
+        if not vjob:
             return Response(status=404)
         return Response(VideoJobDetailSerializer(vjob).data)
 
@@ -624,9 +648,11 @@ class LogoPlacementsView(APIView):
 
     def get(self, request, job_pk):
         ws = get_workspace(request)
-        try:
-            job = ws.generation_jobs.get(pk=job_pk)
-        except GenerationJob.DoesNotExist:
+        job = ws.generation_jobs.filter(pk=job_pk).first() if ws else None
+        if not job:
+            # Same class of bug as JobDetailView above.
+            job = GenerationJob.objects.filter(pk=job_pk, workspace__members=request.user).first()
+        if not job:
             return Response(status=404)
 
         logo_id = request.query_params.get('logo_id')
@@ -1030,7 +1056,10 @@ class CreativeLogoPlacementView(APIView):
         from .services import _find_best_logo_position, _fetch_bytes
 
         ws = get_workspace(request)
-        creative = ws.creatives.filter(pk=pk).first()
+        creative = ws.creatives.filter(pk=pk).first() if ws else None
+        if not creative:
+            # Same class of bug as CreativeDetailView above.
+            creative = GeneratedCreative.objects.filter(pk=pk, workspace__members=request.user).first()
         if not creative:
             return Response(status=404)
 

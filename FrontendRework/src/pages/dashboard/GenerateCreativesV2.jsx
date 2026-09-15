@@ -880,8 +880,12 @@ export default function GenerateCreatives() {
       </AnimatePresence>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left – Reference Photo Grid */}
-        <div style={GLASS_STYLE} className="flex-1 rounded-2xl overflow-hidden flex flex-col min-h-96">
+        {/* Left – Reference Photo Grid — below lg this has an infinite-scroll
+            grid that can grow indefinitely, so it renders *after* the
+            settings panel there (order-2) or the settings would be pushed
+            further down every time another page of photos loads in, making
+            them practically unreachable on a phone. */}
+        <div style={GLASS_STYLE} className="flex-1 rounded-2xl overflow-hidden flex flex-col min-h-96 order-2 lg:order-1">
           <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Image className={`w-4 h-4 ${selectedCharacterId ? 'text-slate-700' : 'text-slate-500'}`} />
@@ -996,7 +1000,7 @@ export default function GenerateCreatives() {
         </div>
 
         {/* Right – Settings Panel */}
-        <div className="w-full lg:w-96 space-y-4">
+        <div className="w-full lg:w-96 space-y-4 order-1 lg:order-2">
           {/* Mode Switcher */}
           <div style={GLASS_STYLE} className="rounded-2xl p-1.5 flex gap-1.5">
             {[{ key: 'auto', label: 'Auto', Icon: Wand2 }, { key: 'custom', label: 'Custom', Icon: Sliders }].map(({ key, label, Icon }) => (

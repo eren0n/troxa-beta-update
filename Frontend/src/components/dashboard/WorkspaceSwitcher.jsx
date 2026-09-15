@@ -71,7 +71,7 @@ export const WorkspaceSwitcher = () => {
       >
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-          <span className="text-xs font-bold text-white uppercase tracking-wider truncate max-w-[60px] xs:max-w-[100px] sm:max-w-none">
+          <span className="text-xs font-bold text-white uppercase tracking-wider truncate max-w-[60px] min-[400px]:max-w-[100px] sm:max-w-none">
             {activeWorkspace.name}<span className="hidden sm:inline"> Workspace</span>
           </span>
         </div>

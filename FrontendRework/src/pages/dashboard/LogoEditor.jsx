@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Check, AlertCircle, Loader2, Trash2, Copy, RotateCcw } from 'lucide-react';
 import { creativesApi, brandKitApi } from '../../lib/api';
 import { loadFabric } from '../../lib/loadFabric';
+import { loadCreativeImageUrl } from '../../lib/creativeUrl';
+import { CreativeImg } from '../../components/ui/CreativeImg';
 
 const SNAP_PX = 14;
 
@@ -107,14 +109,28 @@ export default function LogoEditor() {
     setActiveAngle(Math.round(obj.angle || 0));
   };
 
-  const loadImage = (idx, canvas) => {
+  const loadImage = async (idx, canvas) => {
     const creative = jobRef.current?.creatives?.[idx];
     if (!creative || !containerRef.current || !window.fabric) return;
     canvas.clear();
 
+    // Fetch with the normal Authorization header instead of handing Fabric
+    // the raw, unauthenticated creative.image_url directly — same pattern
+    // as CreativeImg/useCreativeImage elsewhere. The resulting blob: URL is
+    // same-origin, so it also doesn't need crossOrigin:'anonymous' to avoid
+    // tainting the canvas.
+    let blobUrl;
+    try {
+      blobUrl = await loadCreativeImageUrl(creative.id);
+    } catch {
+      setError('Failed to load image.');
+      return;
+    }
+
     window.fabric.Image.fromURL(
-      creative.image_url,
+      blobUrl,
       (img) => {
+        URL.revokeObjectURL(blobUrl);
         const el = containerRef.current;
         const availW = Math.max(200, (el?.clientWidth || 800) - 48);
         const availH = Math.max(200, (el?.clientHeight || 600) - 48);
@@ -126,8 +142,7 @@ export default function LogoEditor() {
         canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), { scaleX: scale, scaleY: scale });
         bgInfoRef.current = { img_w: img.width, img_h: img.height, scale };
         restoreLogos(creative.id, canvas, scale);
-      },
-      { crossOrigin: 'anonymous' }
+      }
     );
   };
 
@@ -423,7 +438,7 @@ export default function LogoEditor() {
   const creatives = job.creatives || [];
 
   return (
-    <div className="flex flex-col bg-[#05070a] text-white" style={{ height: '100vh' }}>
+    <div className="flex flex-col bg-[#05070a] text-white" style={{ height: '100dvh' }}>
 
       {/* ── Header ── */}
       <div className="shrink-0 px-5 py-3 border-b border-white/5 flex items-center justify-between bg-[#0a0d14]">
@@ -460,11 +475,12 @@ export default function LogoEditor() {
         </div>
       </div>
 
-      {/* ── Main area ── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Main area — below lg the two fixed side rails leave no room for
+            the canvas, so stack logos/canvas/controls instead ── */}
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
 
         {/* ── Left: Brand logos ── */}
-        <div className="w-48 shrink-0 border-r border-white/5 bg-[#0a0d14] flex flex-col overflow-hidden">
+        <div className="w-full lg:w-48 shrink-0 border-b lg:border-b-0 lg:border-r border-white/5 bg-[#0a0d14] flex flex-col overflow-hidden max-lg:max-h-[26vh]">
           <div className="px-4 py-3 border-b border-white/5">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Brand Logos</p>
             <p className="text-[9px] text-gray-600 mt-0.5">Click to place on canvas</p>
@@ -499,7 +515,7 @@ export default function LogoEditor() {
         </div>
 
         {/* ── Center: Canvas ── */}
-        <div className="flex-1 flex flex-col bg-[#060810] overflow-hidden">
+        <div className="flex-1 flex flex-col bg-[#060810] overflow-hidden max-lg:min-h-[35vh]">
           <div ref={containerRef} className="flex-1 overflow-hidden flex items-center justify-center p-4">
             <div ref={wrapRef} className="relative shadow-2xl shrink-0">
               <div ref={guideHRef} style={{ display: 'none', position: 'absolute', left: 0, right: 0, height: 1, background: 'rgba(59,130,246,0.85)', pointerEvents: 'none', zIndex: 10 }} />
@@ -515,7 +531,7 @@ export default function LogoEditor() {
                   className={`shrink-0 h-12 w-12 rounded-lg overflow-hidden border-2 transition-all ${
                     i === currentIdx ? 'border-blue-500 shadow-accent-glow' : 'border-white/10 hover:border-white/30'
                   }`}>
-                  <img src={c.image_url} className="w-full h-full object-cover" alt={`Image ${i + 1}`} loading="lazy" decoding="async" />
+                  <CreativeImg creativeId={c.id} className="w-full h-full object-cover" alt={`Image ${i + 1}`} loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>
@@ -523,7 +539,7 @@ export default function LogoEditor() {
         </div>
 
         {/* ── Right: Controls ── */}
-        <div className="w-52 shrink-0 border-l border-white/5 bg-[#0a0d14] flex flex-col">
+        <div className="w-full lg:w-52 shrink-0 border-t lg:border-t-0 lg:border-l border-white/5 bg-[#0a0d14] flex flex-col max-lg:max-h-[30vh] max-lg:overflow-y-auto">
           <div className="px-4 py-3 border-b border-white/5">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Controls</p>
           </div>
