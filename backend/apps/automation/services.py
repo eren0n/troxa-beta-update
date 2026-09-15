@@ -128,6 +128,19 @@ def _worker(run_id):
         except Exception:
             pass
 
+        # A failed run must still advance the schedule. _check_due() clears
+        # next_run_at to claim this run atomically before ever getting here
+        # (see apps.py) — skip this and a scheduled automation that errors
+        # even once goes silent forever: next_run_at stays None, so it never
+        # matches next_run_at__lte=now again and nothing re-triggers it,
+        # with no visible symptom beyond one 'error' row nobody's watching.
+        try:
+            if automation.trigger_type == 'scheduled':
+                automation.next_run_at = _calculate_next_run(automation)
+                automation.save(update_fields=['next_run_at'])
+        except Exception:
+            pass
+
     try:
         run.save(update_fields=['status', 'completed_at', 'error_message'])
     except Exception:

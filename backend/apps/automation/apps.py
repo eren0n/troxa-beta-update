@@ -113,4 +113,21 @@ def _check_due():
     for automation in due:
         if AutomationRun.objects.filter(automation=automation, status='running').exists():
             continue
+        # gunicorn runs several worker *processes* (5 on live/test), and
+        # AppConfig.ready() starts this exact loop in every one of them —
+        # with no coordination between them, two workers waking up in the
+        # same 30s tick both see the same "due" row and neither sees the
+        # other's AutomationRun yet (it doesn't exist until
+        # run_automation_async() creates it), so the "already running"
+        # check above doesn't stop a double-dispatch. Postgres serializes
+        # concurrent UPDATEs to the same row, so an atomic claim — only
+        # proceed if *this* process's UPDATE actually changed the row —
+        # guarantees exactly one worker wins the race; the other(s) see 0
+        # rows affected and skip. A losing worker isn't stuck either: its
+        # own tick 30s later (or the winner's post-run reschedule) covers it.
+        claimed = Automation.objects.filter(
+            pk=automation.pk, next_run_at=automation.next_run_at,
+        ).update(next_run_at=None)
+        if not claimed:
+            continue
         run_automation_async(automation.pk)
