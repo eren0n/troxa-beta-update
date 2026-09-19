@@ -75,7 +75,7 @@ from .services import (
     generate_job_async, make_video_async,
     composite_logos_manual, calculate_logo_placements,
     _deduct_credits, _build_creative_name, _fetch_bytes,
-    aspect_ratio_label_from_size,
+    aspect_ratio_label_from_size, _subscribe_with_retry,
 )
 
 
@@ -895,17 +895,16 @@ class AiEditView(APIView):
 
         os.environ['FAL_KEY'] = settings.FAL_KEY
         try:
-            result = fal_client.subscribe(
-                'fal-ai/nano-banana-2/edit',
-                arguments={
-                    'prompt': prompt,
-                    'image_urls': [image_url],
-                    'aspect_ratio': aspect_ratio,
-                    'output_format': 'png',
-                    'safety_tolerance': '4',
-                    'num_images': 1,
-                },
-            )
+            # Retries automatically if fal's content moderation flags the
+            # request — see _subscribe_with_retry in services.py for why.
+            result = _subscribe_with_retry('fal-ai/nano-banana-2/edit', {
+                'prompt': prompt,
+                'image_urls': [image_url],
+                'aspect_ratio': aspect_ratio,
+                'output_format': 'png',
+                'safety_tolerance': '4',
+                'num_images': 1,
+            })
         except Exception as exc:
             return Response({'error': str(exc)}, status=502)
 

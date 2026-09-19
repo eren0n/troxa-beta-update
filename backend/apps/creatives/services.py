@@ -7,6 +7,7 @@ import re
 import json
 import logging
 import threading
+import time
 import traceback
 import requests
 
@@ -1314,6 +1315,45 @@ def _sanitize_cta_prompt(prompt: str, cta_pool: list = None) -> str:
     return prompt
 
 
+# fal.ai's own content moderation rejects a request with a 422 whose body
+# looks like {"detail": [{"type": "content_policy_violation", "msg": "The
+# content could not be processed because it contained material flagged by
+# a content checker.", ...}]} — verified against real failed jobs in
+# production. This isn't necessarily deterministic (the same prompt can
+# pass on a second attempt), so it's worth a couple of automatic retries
+# before surfacing it as a real failure — a user shouldn't have to notice
+# a flagged generation and manually hit retry themselves.
+_FLAG_MARKERS = ('content_policy_violation', 'flagged by a content checker')
+_FLAG_MAX_RETRIES = 2
+_FLAG_RETRY_DELAY_S = 3
+
+
+def _is_flagged_error(exc) -> bool:
+    text = str(exc).lower()
+    return any(marker in text for marker in _FLAG_MARKERS)
+
+
+def _subscribe_with_retry(model_id, arguments, job=None):
+    """fal_client.subscribe(), auto-retrying if fal's content moderation
+    flagged the request. Any other error (rate limit, timeout, real
+    validation error, ...) is raised immediately — retrying those wouldn't
+    help and would just make a real failure take longer to surface.
+    """
+    attempt = 0
+    while True:
+        try:
+            return fal_client.subscribe(model_id, arguments=arguments)
+        except Exception as exc:
+            if not _is_flagged_error(exc) or attempt >= _FLAG_MAX_RETRIES:
+                raise
+            attempt += 1
+            logger.warning(
+                'generation.flagged_retry job_id=%s model=%s attempt=%d/%d',
+                job.id if job else '?', model_id, attempt, _FLAG_MAX_RETRIES,
+            )
+            time.sleep(_FLAG_RETRY_DELAY_S)
+
+
 def _run_image_model(job):
     model_id = MODEL_MAP.get(job.model_name, 'fal-ai/nano-banana-2')
     raw_extra = re.sub(r'@\[([^\]]+)\]', r'\1', job.extra_prompt) if job.extra_prompt else ''
@@ -1345,7 +1385,7 @@ def _run_image_model(job):
         _mascot_url = getattr(job, '_auto_mascot_url', None)
         if _mascot_url:
             gpt_args['image_urls'] = [_mascot_url]
-        result = fal_client.subscribe(model_id, arguments=gpt_args)
+        result = _subscribe_with_retry(model_id, gpt_args, job=job)
     elif model_id == 'xai/grok-imagine-image':
         grok_resolution = job.resolution.lower() if job.resolution.lower() in ('1k', '2k') else '1k'
         args = {
@@ -1357,7 +1397,7 @@ def _run_image_model(job):
         }
         if job.negative_prompt:
             args['negative_prompt'] = job.negative_prompt
-        result = fal_client.subscribe(model_id, arguments=args)
+        result = _subscribe_with_retry(model_id, args, job=job)
 
     elif model_id == 'bytedance/seedream/v5/pro/text-to-image':
         # Seedream accepts custom {width, height}; min area 1024×1024, max 2048×2048.
@@ -1367,12 +1407,12 @@ def _run_image_model(job):
         sd_prompt = prompt
         if job.negative_prompt:
             sd_prompt = f'{prompt}\n\nDo NOT include any of the following in the image: {job.negative_prompt}'
-        result = fal_client.subscribe(model_id, arguments={
+        result = _subscribe_with_retry(model_id, {
             'prompt': sd_prompt,
             'num_images': job.num_images,
             'image_size': img_size,
             'output_format': job.output_format or 'jpeg',
-        })
+        }, job=job)
 
     elif model_id == 'ideogram/v4':
         # Ideogram uses fal named presets; rendering speed maps to resolution tier.
@@ -1381,13 +1421,13 @@ def _run_image_model(job):
         id_prompt = prompt
         if job.negative_prompt:
             id_prompt = f'{prompt}\n\nDo NOT include any of the following in the image: {job.negative_prompt}'
-        result = fal_client.subscribe(model_id, arguments={
+        result = _subscribe_with_retry(model_id, {
             'prompt': id_prompt,
             'num_images': min(job.num_images, 4),   # Ideogram max is 4
             'image_size': img_size,
             'rendering_speed': speed,
             'output_format': job.output_format or 'jpeg',
-        })
+        }, job=job)
 
     elif model_id == 'fal-ai/qwen-image-2/pro/text-to-image':
         # Qwen accepts custom {width, height}; min area 512×512, max 2048×2048.
@@ -1397,12 +1437,12 @@ def _run_image_model(job):
         qw_prompt = prompt
         if job.negative_prompt:
             qw_prompt = f'{prompt}\n\nDo NOT include any of the following in the image: {job.negative_prompt}'
-        result = fal_client.subscribe(model_id, arguments={
+        result = _subscribe_with_retry(model_id, {
             'prompt': qw_prompt,
             'num_images': job.num_images,
             'image_size': img_size,
             'output_format': job.output_format or 'jpeg',
-        })
+        }, job=job)
 
     elif model_id == 'fal-ai/nano-banana-pro':
         # Nano Banana Pro — same schema as NB2 but safety_tolerance is a string
@@ -1410,14 +1450,14 @@ def _run_image_model(job):
         nb_prompt = prompt
         if job.negative_prompt:
             nb_prompt = f'{prompt}\n\nDo NOT include any of the following in the image: {job.negative_prompt}'
-        result = fal_client.subscribe(model_id, arguments={
+        result = _subscribe_with_retry(model_id, {
             'prompt': nb_prompt,
             'num_images': job.num_images,
             'aspect_ratio': job.aspect_ratio,
             'resolution': job.resolution or '1K',
             'output_format': job.output_format or 'png',
             'safety_tolerance': '4',
-        })
+        }, job=job)
 
     else:
         # Nano Banana 2 (default)
@@ -1431,7 +1471,7 @@ def _run_image_model(job):
         }
         if job.negative_prompt:
             args['negative_prompt'] = job.negative_prompt
-        result = fal_client.subscribe(model_id, arguments=args)
+        result = _subscribe_with_retry(model_id, args, job=job)
 
     if isinstance(result, dict):
         images = result.get('images', [])
