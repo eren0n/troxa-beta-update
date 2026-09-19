@@ -5,7 +5,7 @@ import {
   Download, Grid, List,
   X, Image as ImageIcon, Sparkles,
   ChevronLeft, ChevronRight, Send, Loader2, ChevronDown,
-  TrendingUp, MousePointerClick, DollarSign, Eye, Users, Hash,
+  TrendingUp, MousePointerClick, DollarSign, Eye, Users, Hash, Trophy,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { creativesApi, brandKitApi, metaApi, slackApi } from '../../lib/api';
@@ -873,7 +873,14 @@ export default function GeneratedCreatives() {
                 <div className="p-5 space-y-5 flex-1">
                   {/* Name */}
                   <div>
-                    <p className="text-[10px] font-black text-(--text-muted) uppercase tracking-widest mb-1">Creative</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-[10px] font-black text-(--text-muted) uppercase tracking-widest">Creative</p>
+                      {c?.tags?.some(t => t.name === 'Winner') && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                          <Trophy className="w-2.5 h-2.5 fill-current" /> Winner
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm font-bold text-(--text-primary) leading-snug break-words">{current.name}</p>
                     {c?.campaign_name && <p className="text-[10px] text-(--text-secondary) mt-0.5 break-words">{c.campaign_name}</p>}
                   </div>

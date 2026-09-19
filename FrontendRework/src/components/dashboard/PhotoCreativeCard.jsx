@@ -6,6 +6,7 @@ import { downloadCreativeImage } from '../../lib/creativeUrl';
 import { CreativeImg } from '../ui/CreativeImg';
 import TagBadge from './TagBadge';
 import TagPicker from './TagPicker';
+import WinnerBadge from './WinnerBadge';
 import InlineRename from './InlineRename';
 
 export default function PhotoCreativeCard({
@@ -58,6 +59,14 @@ export default function PhotoCreativeCard({
             </span>
           )}
         </div>
+
+        <WinnerBadge
+          creativeId={creative.id}
+          currentTags={creative.tags || []}
+          allTags={allTags}
+          onChange={(tags) => onTagsChange(creative.id, tags)}
+          onTagCreated={onTagCreated}
+        />
       </div>
 
       {/* min-w-0 lets this column actually shrink below its content's

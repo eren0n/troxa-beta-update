@@ -6,6 +6,7 @@ import { useCreativeImage } from '../../lib/creativeUrl';
 import { CreativeImg } from '../ui/CreativeImg';
 import TagBadge from './TagBadge';
 import TagPicker from './TagPicker';
+import WinnerBadge from './WinnerBadge';
 import InlineRename from './InlineRename';
 
 // Video creatives can't be opened in the photo editor or "Edit Logo" flow,
@@ -109,6 +110,14 @@ export default function VideoCreativeCard({
             </span>
           )}
         </div>
+
+        <WinnerBadge
+          creativeId={creative.id}
+          currentTags={creative.tags || []}
+          allTags={allTags}
+          onChange={(tags) => onTagsChange(creative.id, tags)}
+          onTagCreated={onTagCreated}
+        />
       </div>
 
       {/* min-w-0 lets this column actually shrink below its content's
