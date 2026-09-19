@@ -202,8 +202,13 @@ export default function VideoCreativeCard({
           <span className={`text-[10px] font-bold font-mono ${isHoveringRating ? 'text-amber-400' : 'text-slate-500'}`}>{ratingLabel}</span>
         </div>
 
+        {/* ?download=1 keeps this one request coming from our own origin: the
+            plain video URL now redirects to the CDN for playback, and a
+            `download` attribute is ignored cross-origin, which would open the
+            clip in a tab instead of saving it. */}
         {creative.video_url && (
-          <a href={creative.video_url} download={`${creative.name || creative.id}.mp4`}
+          <a href={`${creative.video_url}${creative.video_url.includes('?') ? '&' : '?'}download=1`}
+            download={`${creative.name || creative.id}.mp4`}
             className="flex items-center justify-center gap-1.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[9px] font-bold uppercase tracking-widest text-gray-300 hover:text-white transition-all">
             <Download className="w-3 h-3" /> Download
           </a>

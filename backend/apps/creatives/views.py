@@ -775,9 +775,26 @@ class VideoJobProxyView(APIView):
     permission_classes = []
 
     def get(self, request, pk):
+        from django.http import HttpResponseRedirect
         vjob = VideoJob.objects.filter(pk=pk).first()
         if not vjob or not vjob.video_url:
             return Response(status=404)
+
+        # Playback: hand the browser the upstream URL instead of piping the
+        # clip through a worker. Streaming a ~20 MB render byte-for-byte kept
+        # one worker busy for the entire transfer — 35 s on average and up to
+        # 459 s over a week of production traffic, which is a large part of
+        # what starved the rest of the API. A redirect costs ~5 ms, and the
+        # CDN answers Range requests, so seeking in the player works for the
+        # first time (this proxy never supported it). Nothing is widened:
+        # the endpoint has never required auth.
+        if request.query_params.get('download') != '1':
+            return HttpResponseRedirect(vjob.video_url)
+
+        # Download: `<a download>` is ignored cross-origin, so saving with a
+        # sensible filename still has to come from our own origin. That costs
+        # a worker for the length of the transfer, but only when someone
+        # deliberately clicks Download — not on every card that autoplays.
         try:
             upstream = http_requests.get(vjob.video_url, stream=True, timeout=60)
             upstream.raise_for_status()
@@ -787,10 +804,9 @@ class VideoJobProxyView(APIView):
                 content_type=content_type,
             )
             response['Cache-Control'] = 'public, max-age=86400'
-            response['Content-Disposition'] = f'inline; filename="{pk}.mp4"'
+            response['Content-Disposition'] = f'attachment; filename="{pk}.mp4"'
             return response
         except Exception:
-            from django.http import HttpResponseRedirect
             return HttpResponseRedirect(vjob.video_url)
 
 
@@ -871,12 +887,20 @@ class AiEditView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        ws = get_workspace(request)
-        if not ws:
-            return Response(status=404)
-        creative = ws.creatives.filter(pk=pk).first()
+        # Found by membership, not by whichever workspace happens to be
+        # active — CreativeDetailView was widened the same way, so the editor
+        # already opens a creative from another workspace fine, and this
+        # endpoint 404'd the moment you pressed "Generate with AI" in it
+        # (production logs show one user retrying it 7 times in 17 seconds).
+        creative = GeneratedCreative.objects.filter(
+            pk=pk, workspace__members=request.user,
+        ).first()
         if not creative:
             return Response(status=404)
+        # Everything downstream belongs to the creative's own workspace, not
+        # the active one: an edit of a Spinpals creative is a Spinpals
+        # creative, and the credits for it come out of Spinpals.
+        ws = creative.workspace
 
         ok, err = _check_credits(ws, 1)
         if not ok:

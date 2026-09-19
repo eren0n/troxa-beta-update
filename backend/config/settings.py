@@ -228,6 +228,15 @@ CORS_ALLOW_HEADERS = [
 CORS_ALLOW_CREDENTIALS = True
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+# Non-file request bodies (JSON) — Django's 2.5 MB default silently rejected
+# every "Save to Gallery" whose base64 canvas export was larger than that,
+# with a bare 400 and no detail, and the editor reported it as a CORS
+# problem. It only ever bit under gunicorn's sync worker (DRF reaches for
+# request.body there, which is where the check lives), so it looked like a
+# live-only bug while test was fine; pinning it here makes the real limit
+# explicit and the same under either worker class. Matches nginx's
+# client_max_body_size on these vhosts.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
 FAL_KEY = os.environ.get('FAL_KEY', '')
 GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
