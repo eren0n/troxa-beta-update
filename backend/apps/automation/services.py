@@ -63,6 +63,8 @@ def _worker(run_id):
                 output_format=automation.output_format,
                 style=getattr(automation, 'style', '') or '',
                 extra_prompt=automation.extra_prompt,
+                negative_prompt=automation.negative_prompt,
+                disclaimer=automation.disclaimer,
                 use_fingerprint=automation.use_fingerprint,
                 blend_weight=automation.blend_weight,
                 simplicity_weight=automation.simplicity_weight,

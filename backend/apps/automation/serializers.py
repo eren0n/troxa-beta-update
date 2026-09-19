@@ -34,11 +34,11 @@ class AutomationSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'generation_mode', 'model_name', 'aspect_ratio', 'aspect_ratios', 'resolution',
             'image_size', 'image_quality', 'num_images', 'output_format',
-            'extra_prompt', 'style', 'use_fingerprint', 'blend_weight', 'simplicity_weight',
+            'extra_prompt', 'style', 'negative_prompt', 'use_fingerprint', 'blend_weight', 'simplicity_weight',
             'trigger_type', 'schedule_time', 'schedule_timezone',
             'schedule_days', 'is_active', 'status', 'last_run_at', 'next_run_at', 'created_at',
             'static_ids', 'logo_id', 'logo_url', 'last_run', 'total_runs', 'total_creatives',
-            'character_id', 'campaign_id',
+            'character_id', 'campaign_id', 'disclaimer_id',
         )
 
     def get_status(self, obj):

@@ -22,6 +22,8 @@ class Automation(models.Model):
     character = models.ForeignKey('brand_kit.Character', on_delete=models.SET_NULL, null=True, blank=True)
     extra_prompt = models.TextField(blank=True)
     style = models.CharField(max_length=100, blank=True)
+    negative_prompt = models.TextField(blank=True, default='')
+    disclaimer = models.ForeignKey('brand_kit.Disclaimer', on_delete=models.SET_NULL, null=True, blank=True)
     generation_mode = models.CharField(max_length=20, default='auto')  # 'auto' | 'custom' | 'prompt_studio'
     model_name = models.CharField(max_length=100, default='Nano Banana 2')
     aspect_ratio = models.CharField(max_length=20, default='1:1')

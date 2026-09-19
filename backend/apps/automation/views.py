@@ -33,6 +33,10 @@ class AutomationListView(APIView):
         if d.get('campaign_id'):
             campaign = ws.campaigns.filter(id=d['campaign_id']).first()
 
+        disclaimer = None
+        if d.get('disclaimer_id'):
+            disclaimer = ws.disclaimers.filter(id=d['disclaimer_id']).first()
+
         character = None
         if d.get('character_id'):
             from apps.brand_kit.models import Character
@@ -48,8 +52,9 @@ class AutomationListView(APIView):
             workspace=ws,
             created_by=request.user,
             name=d.get('name', 'Automation'),
-            extra_prompt=d.get('extra_prompt', ''),
-            style=d.get('style', ''),
+            extra_prompt=d.get('extra_prompt') or '',
+            style=d.get('style') or '',
+            negative_prompt=d.get('negative_prompt') or '',
             generation_mode=d.get('generation_mode', 'auto'),
             model_name=d.get('model_name', 'Nano Banana 2'),
             aspect_ratio=primary_ratio,
@@ -69,6 +74,7 @@ class AutomationListView(APIView):
             logo=logo,
             campaign=campaign,
             character=character,
+            disclaimer=disclaimer,
         )
 
         static_ids = d.get('static_ids', [])
@@ -104,15 +110,27 @@ class AutomationDetailView(APIView):
             return Response(status=404)
         d = request.data
 
+        # Text fields that are blank=True but NOT null=True — an explicit
+        # `null` here reaches .save() as a real None and raises an
+        # IntegrityError (this bit Automation the first time the shared
+        # Generate/Automation settings hook started sending `|| null` for
+        # an empty field, matching Generate's own — nullable — columns).
+        text_fields_not_nullable = {'name', 'extra_prompt', 'style', 'negative_prompt'}
         simple_fields = [
-            'name', 'extra_prompt', 'style', 'model_name', 'aspect_ratio', 'resolution',
+            'name', 'extra_prompt', 'style', 'negative_prompt', 'model_name', 'aspect_ratio', 'resolution',
             'image_size', 'image_quality', 'num_images', 'output_format',
             'trigger_type', 'schedule_time', 'schedule_timezone', 'schedule_days', 'is_active',
             'generation_mode',
         ]
         for field in simple_fields:
             if field in d:
-                setattr(auto, field, d[field] or (None if field == 'schedule_time' else d[field]))
+                value = d[field]
+                if field == 'schedule_time':
+                    setattr(auto, field, value or None)
+                elif value is None and field in text_fields_not_nullable:
+                    setattr(auto, field, '')
+                else:
+                    setattr(auto, field, value)
 
         if 'aspect_ratios' in d:
             auto.aspect_ratios = d['aspect_ratios'] or []
@@ -137,6 +155,9 @@ class AutomationDetailView(APIView):
 
         if 'logo_id' in d:
             auto.logo = ws.logos.filter(id=d['logo_id']).first() if d['logo_id'] else None
+
+        if 'disclaimer_id' in d:
+            auto.disclaimer = ws.disclaimers.filter(id=d['disclaimer_id']).first() if d['disclaimer_id'] else None
 
         if 'static_ids' in d:
             auto.reference_creatives.set(ws.creatives.filter(id__in=d['static_ids'], media_type='Photo'))
