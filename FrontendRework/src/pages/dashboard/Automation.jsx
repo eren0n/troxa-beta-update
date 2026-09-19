@@ -177,11 +177,11 @@ function PipelineBuilderView({ onClose, onCreated, editTarget = null }) {
             ))}
 
             {formTrigger === 'scheduled' && (
-              <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: 'auto' }} exit={{ opacity: 0, width: 0 }}
-                className="flex items-center gap-2 overflow-hidden">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex flex-wrap items-center gap-2">
                 <input type="time" value={formScheduleTime} onChange={e => setFormScheduleTime(e.target.value)} className={InputCls + ' w-auto py-2'} />
                 <div className="relative">
-                  <select value={formScheduleTimezone} onChange={e => setFormScheduleTimezone(e.target.value)} className={InputCls + ' w-auto py-2 pr-8 appearance-none cursor-pointer'}>
+                  <select value={formScheduleTimezone} onChange={e => setFormScheduleTimezone(e.target.value)} className={InputCls + ' min-w-44 py-2 pr-8 appearance-none cursor-pointer'}>
                     {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
                   </select>
                   <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />
