@@ -25,7 +25,12 @@ def setup_plans(apps, schema_editor):
     Subscription = apps.get_model('billing', 'Subscription')
 
     # ── Update existing Free Trial plan ─────────────────────────────────────
-    free_plan = Plan.objects.get(tier='free')
+    # These two rows predate the billing overhaul on the deployed databases,
+    # but a fresh one has no plans at all — so this has to be able to create
+    # them instead of assuming they exist, or migrating a new database stops
+    # here. filter().first() rather than get(): tier deliberately isn't
+    # unique, so a second plan sharing a tier mustn't break the migration.
+    free_plan = Plan.objects.filter(tier='free').first() or Plan(tier='free')
     free_plan.name           = 'Free Trial'
     free_plan.monthly_credits = 50
     free_plan.trial_days      = 14
@@ -37,7 +42,7 @@ def setup_plans(apps, schema_editor):
     free_plan.save()
 
     # ── Update existing Enterprise plan → keep as Enterprise (bypass) ────────
-    ent_plan = Plan.objects.get(tier='enterprise')
+    ent_plan = Plan.objects.filter(tier='enterprise').first() or Plan(tier='enterprise')
     ent_plan.name            = 'Enterprise'
     ent_plan.monthly_credits = 0
     ent_plan.unlimited_usage = True
