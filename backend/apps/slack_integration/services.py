@@ -64,13 +64,154 @@ def _user_label(user):
     return name or user.email
 
 
-def notify_slack_generation(workspace, job, image_urls, creative_ids=None):
+# Action ids travel in the message and come back in the interaction payload;
+# SlackInteractionView dispatches on them.
+RATE_ACTION_ID   = 'creative_rate'
+WINNER_ACTION_ID = 'creative_winner'
+# Block ids tag each creative's row so a click can be rewritten in place
+# without disturbing the other variants in the same message.
+RATE_BLOCK_PREFIX  = 'rate:'
+RATED_BLOCK_PREFIX = 'rated:'
+
+# Slack echoes these back on image blocks it has already fetched; they aren't
+# valid input, so they're stripped before a message is re-posted.
+_ECHOED_IMAGE_FIELDS = ('fallback', 'image_width', 'image_height', 'image_bytes', 'is_animated')
+
+
+def _creative_url(creative):
+    if creative is None:
+        return ''
+    return creative.logo_applied_url or creative.image_url or ''
+
+
+def _rating_status_text(creative, actor=None):
+    parts = []
+    if creative.rating:
+        parts.append(f':star: *{creative.rating}/10*')
+    from apps.creatives.rating import is_winner
+    if is_winner(creative):
+        parts.append(':trophy: *Winner*')
+    if not parts:
+        return ''
+    if actor:
+        parts.append(f'_by {actor}_')
+    return '  ·  '.join(parts)
+
+
+def creative_action_blocks(creative, actor=None):
+    """
+    The rating row that sits under a posted creative.
+
+    Slack has no star widget, so the gallery's 1-10 scale becomes a select, and
+    the trophy button toggles the same 'Winner' tag the gallery's badge writes.
+    Both carry the creative id in their value: the interaction payload
+    otherwise only says "someone clicked in this channel", so that id is the
+    one thing tying a click back to a row.
+    """
+    if creative is None:
+        return []
+
+    from apps.creatives.rating import RATING_MAX, RATING_MIN
+
+    cid = str(creative.id)
+    options = [
+        {'text': {'type': 'plain_text', 'text': f'{n}/10'}, 'value': f'{cid}:{n}'}
+        for n in range(RATING_MIN, RATING_MAX + 1)
+    ]
+    select = {
+        'type': 'static_select',
+        'action_id': RATE_ACTION_ID,
+        'placeholder': {'type': 'plain_text', 'text': 'Rate 1-10'},
+        'options': options,
+    }
+    if creative.rating:
+        # initial_option has to be one of the options above, value included.
+        select['initial_option'] = options[creative.rating - RATING_MIN]
+
+    from apps.creatives.rating import is_winner
+    winner = is_winner(creative)
+    winner_btn = {
+        'type': 'button',
+        'action_id': WINNER_ACTION_ID,
+        'text': {'type': 'plain_text', 'text': ':trophy: Winner' if winner else 'Mark winner', 'emoji': True},
+        'value': cid,
+    }
+    if winner:
+        winner_btn['style'] = 'primary'
+
+    blocks = [{
+        'type': 'actions',
+        'block_id': f'{RATE_BLOCK_PREFIX}{cid}',
+        'elements': [select, winner_btn],
+    }]
+    status = _rating_status_text(creative, actor=actor)
+    if status:
+        blocks.append({
+            'type': 'context',
+            'block_id': f'{RATED_BLOCK_PREFIX}{cid}',
+            'elements': [{'type': 'mrkdwn', 'text': status}],
+        })
+    return blocks
+
+
+def _creative_blocks(creative, title, alt=None):
+    """An image plus its own rating row, so every variant in a post is rateable."""
+    blocks = [{
+        'type': 'image',
+        'image_url': _creative_url(creative),
+        'alt_text': (alt or title)[:2000],
+        'title': {'type': 'plain_text', 'text': title[:75]},
+    }]
+    blocks.extend(creative_action_blocks(creative))
+    return blocks
+
+
+def refresh_rating_row(response_url, message, creative, actor=None):
+    """
+    Rewrite one creative's rating row in the message it was clicked in.
+
+    Slack only offers whole-message replacement, so the original blocks arrive
+    in the interaction payload and we splice in just the row that changed —
+    the other three variants of a 4-image post are left exactly as they were.
+    """
+    cid = str(creative.id)
+    fresh = creative_action_blocks(creative, actor=actor)
+    out, replaced = [], False
+    for block in ((message or {}).get('blocks') or []):
+        bid = block.get('block_id') or ''
+        if bid == f'{RATE_BLOCK_PREFIX}{cid}':
+            out.extend(fresh)
+            replaced = True
+            continue
+        if bid == f'{RATED_BLOCK_PREFIX}{cid}':
+            continue  # the fresh row brings its own status line
+        if block.get('type') == 'image':
+            block = {k: v for k, v in block.items() if k not in _ECHOED_IMAGE_FIELDS}
+        out.append(block)
+    if not replaced:
+        return
+    try:
+        http_requests.post(
+            response_url,
+            json={
+                'replace_original': True,
+                'text': (message or {}).get('text') or 'Creative updated',
+                'blocks': out,
+            },
+            timeout=10,
+        )
+    except Exception:
+        pass
+
+
+def notify_slack_generation(workspace, job, creatives):
     channels = _get_channels(workspace, 'creatives')
-    if not channels or not image_urls:
+    creatives = [c for c in (creatives or []) if _creative_url(c)]
+    if not channels or not creatives:
         return
 
     campaign  = job.campaign.name if job.campaign else 'Creatives'
-    count     = len(image_urls)
+    count     = len(creatives)
     base_url  = settings.SITE_BASE_URL
     by        = _user_label(job.created_by)
 
@@ -87,9 +228,8 @@ def notify_slack_generation(workspace, job, image_urls, creative_ids=None):
             },
         },
     ]
-    for i, url in enumerate(image_urls[:4], 1):
-        blocks.append({'type': 'image', 'image_url': url, 'alt_text': f'{campaign} — Variant {i}',
-                        'title': {'type': 'plain_text', 'text': f'Variant {i}'}})
+    for i, c in enumerate(creatives[:4], 1):
+        blocks.extend(_creative_blocks(c, f'Variant {i}', f'{campaign} — Variant {i}'))
     if count > 4:
         blocks.append({'type': 'context', 'elements': [
             {'type': 'mrkdwn', 'text': f'_+{count - 4} more in your <{base_url}/dashboard|Troxa dashboard>_'}]})
@@ -105,7 +245,7 @@ def notify_slack_generation(workspace, job, image_urls, creative_ids=None):
             'blocks': blocks,
         })
 
-    _mark_posted(creative_ids)
+    _mark_posted([str(c.id) for c in creatives])
 
 
 def notify_slack_video(workspace, vjob):
@@ -128,11 +268,14 @@ def notify_slack_video(workspace, vjob):
                 ),
             },
         },
-        {'type': 'actions', 'elements': [{
-            'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
-            'url': f'{base_url}/dashboard', 'style': 'primary',
-        }]},
     ]
+    # The rating lives on the source creative — same row the gallery's video
+    # card rates — so the clip is scored from Slack just like a still.
+    blocks.extend(creative_action_blocks(vjob.source_creative))
+    blocks.append({'type': 'actions', 'elements': [{
+        'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
+        'url': f'{base_url}/dashboard', 'style': 'primary',
+    }]})
 
     for sc, token in channels:
         _post(token, 'chat.postMessage', {
@@ -145,12 +288,13 @@ def notify_slack_video(workspace, vjob):
         _mark_posted([str(vjob.source_creative_id)])
 
 
-def notify_slack_logo_save(workspace, image_urls, user=None, creative_ids=None):
+def notify_slack_logo_save(workspace, creatives, user=None):
     channels = _get_channels(workspace, 'logos')
-    if not channels or not image_urls:
+    creatives = [c for c in (creatives or []) if _creative_url(c)]
+    if not channels or not creatives:
         return
 
-    count    = len(image_urls)
+    count    = len(creatives)
     base_url = settings.SITE_BASE_URL
     by       = _user_label(user)
 
@@ -158,9 +302,8 @@ def notify_slack_logo_save(workspace, image_urls, user=None, creative_ids=None):
         'text': f':art: *Logo applied* — {count} image{"s" if count != 1 else ""} saved'
                 + (f'\n*Saved by:* {by}' if by else ''),
     }}]
-    for i, url in enumerate(image_urls[:4], 1):
-        blocks.append({'type': 'image', 'image_url': url, 'alt_text': f'With Logo — Variant {i}',
-                        'title': {'type': 'plain_text', 'text': f'Variant {i}'}})
+    for i, c in enumerate(creatives[:4], 1):
+        blocks.extend(_creative_blocks(c, f'Variant {i}', f'With Logo — Variant {i}'))
     if count > 4:
         blocks.append({'type': 'context', 'elements': [
             {'type': 'mrkdwn', 'text': f'_+{count - 4} more in your <{base_url}/dashboard|Troxa dashboard>_'}]})
@@ -176,7 +319,7 @@ def notify_slack_logo_save(workspace, image_urls, user=None, creative_ids=None):
             'blocks': blocks,
         })
 
-    _mark_posted(creative_ids)
+    _mark_posted([str(c.id) for c in creatives])
 
 
 def notify_slack_automation_start(workspace, automation):
@@ -196,12 +339,13 @@ def notify_slack_automation_start(workspace, automation):
         })
 
 
-def notify_slack_automation_done(workspace, automation, image_urls):
+def notify_slack_automation_done(workspace, automation, creatives):
     channels = _get_channels(workspace, 'automation')
+    creatives = [c for c in (creatives or []) if _creative_url(c)]
     if not channels:
         return
 
-    count    = len(image_urls)
+    count    = len(creatives)
     base_url = settings.SITE_BASE_URL
     by       = _user_label(automation.created_by)
 
@@ -210,10 +354,8 @@ def notify_slack_automation_done(workspace, automation, image_urls):
                  f'{count} image{"s" if count != 1 else ""} generated'
                  + (f'\n*Generated by:* {by}' if by else '')),
     }}]
-    for i, url in enumerate(image_urls[:4], 1):
-        blocks.append({'type': 'image', 'image_url': url,
-                        'alt_text': f'{automation.name} — Variant {i}',
-                        'title': {'type': 'plain_text', 'text': f'Variant {i}'}})
+    for i, c in enumerate(creatives[:4], 1):
+        blocks.extend(_creative_blocks(c, f'Variant {i}', f'{automation.name} — Variant {i}'))
     if count > 4:
         blocks.append({'type': 'context', 'elements': [
             {'type': 'mrkdwn', 'text': f'_+{count - 4} more in your <{base_url}/dashboard|Troxa dashboard>_'}]})
@@ -228,6 +370,8 @@ def notify_slack_automation_done(workspace, automation, image_urls):
             'text': f':white_check_mark: Automation "{automation.name}" complete — {count} images',
             'blocks': blocks,
         })
+
+    _mark_posted([str(c.id) for c in creatives])
 
 
 def notify_slack_automation_error(workspace, automation, error_msg):
@@ -272,11 +416,12 @@ def notify_slack_edit(workspace, creative, user=None):
         },
         {'type': 'image', 'image_url': url, 'alt_text': creative.name,
          'title': {'type': 'plain_text', 'text': creative.name[:75]}},
-        {'type': 'actions', 'elements': [{
-            'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
-            'url': f'{base_url}/dashboard', 'style': 'primary',
-        }]},
     ]
+    blocks.extend(creative_action_blocks(creative))
+    blocks.append({'type': 'actions', 'elements': [{
+        'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
+        'url': f'{base_url}/dashboard', 'style': 'primary',
+    }]})
 
     for sc, token in channels:
         _post(token, 'chat.postMessage', {
@@ -306,11 +451,12 @@ def post_creatives_to_channel(sc, token, creatives):
                          + (f'  |  Campaign: {creative.campaign.name}' if creative.campaign else '')
                          + f'  |  {creative.aspect_ratio}  |  {creative.media_type}'),
             }]},
-            {'type': 'actions', 'elements': [{
-                'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
-                'url': f'{base_url}/dashboard', 'style': 'primary',
-            }]},
         ]
+        blocks.extend(creative_action_blocks(creative))
+        blocks.append({'type': 'actions', 'elements': [{
+            'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
+            'url': f'{base_url}/dashboard', 'style': 'primary',
+        }]})
         _post(token, 'chat.postMessage', {
             'channel': sc.channel_id,
             'text': creative.name,

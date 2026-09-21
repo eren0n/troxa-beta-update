@@ -96,18 +96,17 @@ def _worker(run_id):
         run.status = 'done'
         run.completed_at = timezone.now()
 
-        # Notify Slack: done with images (logo URLs preferred, fallback to raw)
+        # Notify Slack: done with images. The creatives themselves go over, not
+        # just their URLs — each posted image carries a rating control bound to
+        # its own creative id, which needs the row, and the URL is derived from
+        # it the same way (logo applied preferred, raw as fallback).
         try:
             from apps.slack_integration.services import notify_slack_automation_done
-            image_urls = []
+            done_creatives = []
             for j in all_jobs:
                 j.refresh_from_db()
-                image_urls.extend(
-                    c.logo_applied_url or c.image_url
-                    for c in j.creatives.all()
-                    if c.logo_applied_url or c.image_url
-                )
-            notify_slack_automation_done(ws, automation, image_urls)
+                done_creatives.extend(j.creatives.all())
+            notify_slack_automation_done(ws, automation, done_creatives)
         except Exception:
             pass
 

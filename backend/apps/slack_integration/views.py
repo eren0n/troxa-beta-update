@@ -1,5 +1,8 @@
 import hashlib
 import hmac
+import json
+import logging
+import threading
 import time
 from urllib.parse import urlencode
 
@@ -14,7 +17,13 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from apps.accounts.views import get_workspace
+from django.core.exceptions import ValidationError
+
+from apps.creatives.rating import apply_rating, toggle_winner
 from .models import SlackInstallation, SlackChannel, ALL_CONTENT_TYPES
+from .services import RATE_ACTION_ID, WINNER_ACTION_ID, refresh_rating_row
+
+logger = logging.getLogger(__name__)
 
 SLACK_OAUTH_URL = 'https://slack.com/oauth/v2/authorize'
 SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access'
@@ -400,3 +409,98 @@ def _verify_slack_signature(request):
     mac      = hmac.new(signing_secret, base.encode(), hashlib.sha256)
     expected = 'v0=' + mac.hexdigest()
     return hmac.compare_digest(expected, signature)
+
+
+class SlackInteractionView(APIView):
+    """
+    Where Slack delivers button and select clicks.
+
+    Slack allows one interactivity Request URL per app, so this is the single
+    entry point for every interactive control we put in a message; it
+    dispatches on the action id. The rating itself is applied through
+    apps.creatives.rating, the same path the dashboard's PATCH takes, so a
+    score set from a channel triggers the fingerprint re-analysis and lands in
+    the activity log exactly like one set in the gallery.
+    """
+    permission_classes = [AllowAny]
+    # Every click in every connected workspace arrives from Slack's own IPs, so
+    # the default 30/min anonymous throttle would start dropping them as soon
+    # as a couple of people worked through a 4-variant post. The HMAC check
+    # below is the real gate here — nothing without our signing secret gets in.
+    throttle_classes = []
+
+    def post(self, request):
+        # Read the raw body for the HMAC before anything parses it.
+        if not _verify_slack_signature(request):
+            return Response(status=403)
+
+        try:
+            payload = json.loads(request.data.get('payload') or '{}')
+        except (TypeError, ValueError):
+            return Response(status=400)
+
+        if payload.get('type') != 'block_actions':
+            return Response(status=200)
+
+        actions = payload.get('actions') or []
+        if not actions:
+            return Response(status=200)
+
+        action    = actions[0]
+        action_id = action.get('action_id')
+        if action_id not in (RATE_ACTION_ID, WINNER_ACTION_ID):
+            return Response(status=200)
+
+        raw = (action.get('selected_option') or {}).get('value') or action.get('value') or ''
+        creative_id, _, score = raw.partition(':')
+
+        # Authorization. The ids in these controls come from our own messages,
+        # but a channel must never be able to touch another workspace's
+        # creatives just by replaying a value from somewhere else — so the
+        # creative has to belong to the workspace this channel is wired to.
+        # A valid Slack signature only proves the click came through our app;
+        # it says nothing about which workspace's data the clicker may reach.
+        team_id    = (payload.get('team') or {}).get('id') or ''
+        channel_id = (payload.get('channel') or {}).get('id') or ''
+        sc = (SlackChannel.objects
+              .filter(channel_id=channel_id, installation__team_id=team_id)
+              .select_related('workspace').first())
+        if not sc:
+            return Response(status=200)
+
+        from apps.creatives.models import GeneratedCreative
+        try:
+            creative = GeneratedCreative.objects.filter(
+                pk=creative_id, workspace=sc.workspace,
+            ).first()
+        except (ValueError, ValidationError):
+            return Response(status=200)   # not a uuid — nothing to act on
+        if not creative:
+            return Response(status=200)
+
+        slack_user = payload.get('user') or {}
+        actor = '@' + (slack_user.get('username')
+                       or (slack_user.get('name') or '')
+                       or slack_user.get('id') or 'slack')
+
+        try:
+            if action_id == RATE_ACTION_ID:
+                apply_rating(creative, score, source='slack', actor=actor)
+            else:
+                toggle_winner(creative, source='slack', actor=actor)
+        except Exception:
+            logger.exception('slack.interaction_failed action=%s creative=%s', action_id, creative_id)
+            return Response(status=200)
+
+        # Slack wants an ack within 3 seconds and rewriting the message is
+        # another round trip, so it goes to a thread and this returns now.
+        response_url = payload.get('response_url')
+        if response_url:
+            threading.Thread(
+                target=refresh_rating_row,
+                args=(response_url, payload.get('message'), creative),
+                kwargs={'actor': actor},
+                daemon=True,
+            ).start()
+
+        return Response(status=200)

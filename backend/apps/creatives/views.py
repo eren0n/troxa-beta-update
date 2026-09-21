@@ -66,6 +66,7 @@ from apps.brand_kit.models import Logo, Disclaimer, Campaign, Character
 from apps.billing.models import Subscription
 
 from .models import GenerationJob, GeneratedCreative, VideoJob, LogoJob, LogoJobImage, CreativeTag
+from .rating import apply_rating
 from .serializers import (
     GenerationJobSerializer, GeneratedCreativeSerializer,
     VideoJobSerializer, VideoJobDetailSerializer,
@@ -546,21 +547,12 @@ class CreativeDetailView(APIView):
                       'is_edited', 'aspect_ratio', 'campaign_id'):
             if field in request.data:
                 setattr(creative, field, request.data[field])
-        rating_changed = False
-        if 'rating' in request.data:
-            val = request.data['rating']
-            new_rating = max(1, min(10, int(val))) if val is not None else None
-            if new_rating != creative.rating:
-                creative.rating = new_rating
-                rating_changed = True
         creative.save()
-        # Fingerprint: trigger Agent 1 analysis whenever rating is set/changed
-        if rating_changed and creative.rating is not None:
-            try:
-                from apps.fingerprint.services import trigger_analyze_generation
-                trigger_analyze_generation(creative.id, ws.id)
-            except Exception:
-                pass
+        # Rating goes through the shared path in rating.py — the fingerprint
+        # re-analysis and the activity-log entry live there, so a rating set
+        # here and one set from a Slack message do exactly the same thing.
+        if 'rating' in request.data:
+            apply_rating(creative, request.data['rating'], user=request.user, source='dashboard')
         return Response(GeneratedCreativeSerializer(creative).data)
 
     def delete(self, request, pk):
@@ -744,12 +736,14 @@ class LogoEditorSaveView(APIView):
             try:
                 from apps.slack_integration.services import notify_slack_logo_save
                 import threading as _t
-                image_urls = [request.build_absolute_uri(lji.file.url) for lji in saved_images]
-                logo_creative_ids = [str(lji.source_creative_id) for lji in saved_images if lji.source_creative_id]
+                # The creatives, not bare URLs: each posted image gets a rating
+                # control bound to its creative id, and logo_applied_url was
+                # just written above, so the URL comes off the row anyway.
+                logo_creatives = [lji.source_creative for lji in saved_images if lji.source_creative_id]
                 _t.Thread(
                     target=notify_slack_logo_save,
-                    args=(ws, image_urls),
-                    kwargs={'user': request.user, 'creative_ids': logo_creative_ids},
+                    args=(ws, logo_creatives),
+                    kwargs={'user': request.user},
                     daemon=True,
                 ).start()
             except Exception:
