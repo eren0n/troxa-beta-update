@@ -253,6 +253,7 @@ class SlackGenerateTests(TestCase):
         blocks = {b.get('block_id'): b for b in view['blocks'] if b.get('block_id')}
         self.assertEqual(
             blocks['campaign']['element']['options'][0]['value'], str(self.campaign.id))
+        self.assertTrue(blocks['campaign']['dispatch_action'])   # drives the brief list
         self.assertEqual(len(blocks['count']['element']['options']), 4)
 
     def test_generate_in_an_unconnected_channel_explains_setup(self):
@@ -279,10 +280,10 @@ class SlackGenerateTests(TestCase):
                 'callback_id': callback,
                 'private_metadata': channel,
                 'state': {'values': {
-                    'campaign': {'value': {'selected_option': {
+                    'campaign': {'campaign_pick': {'selected_option': {
                         'value': str(campaign_id or self.campaign.id)}}},
-                    'prompt': {'value': {'value': prompt}},
-                    'count': {'value': {'selected_option': {'value': count}}},
+                    'prompt': {'prompt_text': {'value': prompt}},
+                    'count': {'count_pick': {'selected_option': {'value': count}}},
                 }},
             },
         }
@@ -308,6 +309,11 @@ class SlackGenerateTests(TestCase):
         self.assertEqual(job.campaign, self.campaign)
         self.assertEqual(job.model_name, AUTO_MODE_MODEL)
         self.assertEqual(job.generation_mode, 'auto')
+        # The brand fingerprint is hard-on for the Generate tab, so a Slack
+        # request has to carry it too — without it the images come back generic
+        # rather than on-brand, which is the whole point of the workspace's DNA.
+        self.assertTrue(job.use_fingerprint)
+        self.assertEqual(job.blend_weight, 50)
         run.assert_called_once_with(job.id)
 
     def test_insufficient_credits_keeps_the_modal_open(self):
@@ -387,3 +393,156 @@ class SlackGenerateTests(TestCase):
         data = GeneratedCreativeSerializer(c).data
         self.assertEqual(data['created_by_name'], 'Slack')
         self.assertEqual(data['generated_by_name'], 'Slack')
+
+
+@override_settings(SLACK_SIGNING_SECRET=SECRET)
+class SlackGenerateBriefTests(TestCase):
+    """The dialog's Campaign Intel brief picker — the same mechanism the Generate tab uses."""
+
+    def setUp(self):
+        from apps.billing.models import Plan, Subscription
+        from apps.brand_kit.models import Campaign
+        from apps.fingerprint.models import CampaignCreativeBrief
+
+        self.user = User.objects.create_user(username='b', email='b@c.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.user)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.user, role='owner')
+        plan = Plan.objects.create(name='Team', tier='team', monthly_credits=500)
+        Subscription.objects.create(workspace=self.ws, plan=plan)
+        self.inst = SlackInstallation.objects.create(team_id='T1', bot_token='xoxb-1')
+        self.chan = SlackChannel.objects.create(
+            workspace=self.ws, installation=self.inst, channel_id='C1',
+            content_types=[], auto_post_types=[])
+        self.campaign = Campaign.objects.create(workspace=self.ws, name='Summer Push')
+        self.other_campaign = Campaign.objects.create(workspace=self.ws, name='Winter')
+        CampaignCreativeBrief.objects.create(
+            campaign=self.campaign, workspace=self.ws, status='ready',
+            briefs=[
+                {'id': 'brief_1', 'type': 'on-brand', 'title': 'Zeus Enthroned',
+                 'extra_prompt': 'A muscular Zeus hurling lightning at the logo'},
+                {'id': 'brief_2', 'type': 'trend-forward', 'title': 'Neon Reels',
+                 'extra_prompt': 'Neon-lit slot reels spinning over a city skyline'},
+                # no extra_prompt — nothing to put in the prompt box, so it is skipped
+                {'id': 'brief_3', 'type': 'the-bet', 'title': 'Half-written'},
+            ])
+
+    def change(self, action_id, values, view_id='V1'):
+        payload = {
+            'type': 'block_actions',
+            'team': {'id': 'T1'},
+            'user': {'id': 'U9', 'username': 'eren'},
+            'actions': [{'action_id': action_id}],
+            'view': {
+                'id': view_id, 'hash': 'H1',
+                'callback_id': 'troxa_generate', 'private_metadata': 'C1',
+                'state': {'values': values},
+            },
+        }
+        body = 'payload=' + json.dumps(payload)
+        with mock.patch('apps.slack_integration.views._post_slack',
+                        return_value={'ok': True}) as api:
+            resp = self.client.post(URL, data=body,
+                                    content_type='application/x-www-form-urlencoded',
+                                    **sign(body))
+        return resp, api
+
+    def state(self, campaign=None, brief='', prompt='', count='2'):
+        values = {
+            'campaign': {'campaign_pick': {'selected_option': {
+                'value': str(campaign.id) if campaign else ''}}},
+            'prompt': {'prompt_text': {'value': prompt}},
+            'count': {'count_pick': {'selected_option': {'value': count}}},
+        }
+        if brief:
+            values['brief'] = {'brief_pick': {'selected_option': {'value': brief}}}
+        return values
+
+    def blocks_of(self, api):
+        view = api.call_args.args[2]['view']
+        return {b.get('block_id'): b for b in view['blocks'] if b.get('block_id')}, view
+
+    def test_picking_a_campaign_loads_its_briefs(self):
+        resp, api = self.change('campaign_pick', self.state(campaign=self.campaign))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(api.call_args.args[1], 'views.update')
+        self.assertEqual(api.call_args.args[2]['view_id'], 'V1')
+        blocks, _ = self.blocks_of(api)
+        options = blocks['brief']['element']['options']
+        self.assertEqual([o['value'] for o in options], ['brief_1', 'brief_2'])
+        self.assertIn('Zeus Enthroned', options[0]['text']['text'])
+        self.assertIn('On Brand', options[0]['text']['text'])
+        self.assertTrue(blocks['brief']['optional'])
+
+    def test_picking_a_brief_fills_the_prompt_like_the_generate_tab(self):
+        _, api = self.change('brief_pick',
+                             self.state(campaign=self.campaign, brief='brief_2', prompt='typed'))
+        blocks, _ = self.blocks_of(api)
+        self.assertEqual(blocks['prompt']['element']['initial_value'],
+                         'Neon-lit slot reels spinning over a city skyline')
+        self.assertEqual(blocks['brief']['element']['initial_option']['value'], 'brief_2')
+
+    def test_changing_the_campaign_drops_the_previous_brief(self):
+        _, api = self.change('campaign_pick',
+                             self.state(campaign=self.other_campaign, brief='brief_1',
+                                        prompt='keep me'))
+        blocks, view = self.blocks_of(api)
+        self.assertNotIn('brief', blocks)                     # Winter has no briefs
+        # the hint is a context block, which carries no block_id
+        self.assertIn('No Campaign Intel briefs', json.dumps(view))
+        # whatever was typed survives the re-render
+        self.assertEqual(blocks['prompt']['element']['initial_value'], 'keep me')
+
+    def test_selection_and_count_survive_a_rerender(self):
+        _, api = self.change('campaign_pick', self.state(campaign=self.campaign, count='4'))
+        blocks, _ = self.blocks_of(api)
+        self.assertEqual(blocks['campaign']['element']['initial_option']['value'],
+                         str(self.campaign.id))
+        self.assertEqual(blocks['count']['element']['initial_option']['value'], '4')
+
+    def test_only_the_newest_ready_brief_set_is_offered(self):
+        from apps.fingerprint.models import CampaignCreativeBrief
+        from apps.slack_integration.services import briefs_for_campaign
+        CampaignCreativeBrief.objects.create(
+            campaign=self.campaign, workspace=self.ws, status='ready',
+            briefs=[{'id': 'brief_9', 'type': 'the-bet', 'title': 'Newest',
+                     'extra_prompt': 'newer direction'}])
+        CampaignCreativeBrief.objects.create(
+            campaign=self.campaign, workspace=self.ws, status='pending',
+            briefs=[{'id': 'brief_x', 'extra_prompt': 'not ready'}])
+        self.assertEqual([b['id'] for b in briefs_for_campaign(self.campaign)], ['brief_9'])
+
+    def test_a_dialog_change_from_another_modal_is_ignored(self):
+        payload = {
+            'type': 'block_actions', 'team': {'id': 'T1'}, 'user': {'id': 'U9'},
+            'actions': [{'action_id': 'campaign_pick'}],
+            'view': {'id': 'V1', 'callback_id': 'someone_elses_modal',
+                     'private_metadata': 'C1', 'state': {'values': {}}},
+        }
+        body = 'payload=' + json.dumps(payload)
+        with mock.patch('apps.slack_integration.views._post_slack') as api:
+            resp = self.client.post(URL, data=body,
+                                    content_type='application/x-www-form-urlencoded',
+                                    **sign(body))
+        self.assertEqual(resp.status_code, 200)
+        api.assert_not_called()
+
+    def test_submitting_a_brief_filled_prompt_generates_from_it(self):
+        from apps.creatives.models import GenerationJob
+        payload = {
+            'type': 'view_submission', 'team': {'id': 'T1'},
+            'user': {'id': 'U9', 'username': 'eren'},
+            'view': {'callback_id': 'troxa_generate', 'private_metadata': 'C1',
+                     'state': {'values': self.state(
+                         campaign=self.campaign, brief='brief_1',
+                         prompt='A muscular Zeus hurling lightning at the logo')}},
+        }
+        body = 'payload=' + json.dumps(payload)
+        with mock.patch('apps.creatives.services.generate_job_async'), \
+             mock.patch('apps.slack_integration.services._post'):
+            resp = self.client.post(URL, data=body,
+                                    content_type='application/x-www-form-urlencoded',
+                                    **sign(body))
+        self.assertEqual(resp.status_code, 200)
+        job = GenerationJob.objects.get()
+        self.assertEqual(job.extra_prompt, 'A muscular Zeus hurling lightning at the logo')
+        self.assertTrue(job.use_fingerprint)

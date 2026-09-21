@@ -26,6 +26,12 @@ DEFAULT_MODEL = 'Nano Banana 2'
 # modal doesn't ask for a model, so it has to pick the same one the dashboard
 # would have picked for the same input (see useGenerationSettings.js).
 AUTO_MODE_MODEL = 'GPT Image 2'
+# The brand fingerprint has no user toggle on the Generate tab — it is hard-on
+# there (useGenerationSettings.js: `const useFingerprint = true`). Surfaces that
+# don't ask about it read these instead of quietly generating without the brand
+# DNA, which is most of what makes a creative look like the brand's.
+FINGERPRINT_ALWAYS_ON = True
+DEFAULT_BLEND_WEIGHT = 50
 
 
 def credit_cost(num_images, model_name=DEFAULT_MODEL):
@@ -105,7 +111,7 @@ def start_generation(ws, params, *, user=None, origin='dashboard', origin_channe
         extra_prompt=d.get('extra_prompt') or '',
         negative_prompt=d.get('negative_prompt') or '',
         use_fingerprint=bool(d.get('use_fingerprint', False)),
-        blend_weight=int(d.get('blend_weight', 50)),
+        blend_weight=int(d.get('blend_weight', DEFAULT_BLEND_WEIGHT)),
         simplicity_weight=(int(d['simplicity_weight'])
                            if d.get('simplicity_mode') and d.get('simplicity_weight') is not None
                            else None),

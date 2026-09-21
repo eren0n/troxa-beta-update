@@ -439,19 +439,51 @@ GENERATE_CALLBACK_ID = 'troxa_generate'
 # Modal inputs. The block ids are also where a validation error gets attached,
 # so they have to match what the submission handler reports against.
 GEN_BLOCK_CAMPAIGN = 'campaign'
+GEN_BLOCK_BRIEF    = 'brief'
 GEN_BLOCK_PROMPT   = 'prompt'
 GEN_BLOCK_COUNT    = 'count'
-GEN_INPUT_ACTION   = 'value'
+# One action id per block: picking a campaign or a brief re-renders the dialog,
+# so those two have to be distinguishable in the interaction payload.
+GEN_ACTIONS = {
+    GEN_BLOCK_CAMPAIGN: 'campaign_pick',
+    GEN_BLOCK_BRIEF:    'brief_pick',
+    GEN_BLOCK_PROMPT:   'prompt_text',
+    GEN_BLOCK_COUNT:    'count_pick',
+}
 
 
-def generate_modal_view(ws, campaigns, channel_id, max_images=4):
+def briefs_for_campaign(campaign):
+    """
+    The campaign's current Creative Director briefs, chosen the same way the
+    Generate tab's Campaign Intel panel chooses them: the newest ready set.
+    """
+    if not campaign:
+        return []
+    row = campaign.creative_briefs.filter(status='ready').first()
+    return [b for b in (row.briefs if row else []) if b.get('extra_prompt')]
+
+
+def _brief_option(brief):
+    kind = (brief.get('type') or '').replace('-', ' ').title()
+    title = brief.get('title') or 'Untitled'
+    return {'text': {'type': 'plain_text', 'text': f'{title} · {kind}'[:75]},
+            'value': str(brief.get('id'))}
+
+
+def generate_modal_view(ws, campaigns, channel_id, *, campaign_id=None, briefs=None,
+                        brief_id=None, prompt='', count='2', max_images=4):
     """
     The /troxa generate dialog.
 
-    Deliberately short: campaign, prompt, how many. Everything else — model,
-    ratio, resolution, format — takes the same defaults the Generate tab uses
-    in auto mode, so a Slack request and a dashboard request with the same
-    three answers produce the same job.
+    Deliberately short: campaign, an optional Campaign Intel brief, prompt, how
+    many. Model, ratio, resolution and format take the same defaults the
+    Generate tab uses in auto mode, so a Slack request and a dashboard request
+    with the same answers produce the same job.
+
+    Picking a brief does here exactly what it does on the Generate tab — drops
+    its extra_prompt into the prompt box, editable before submitting. Campaign
+    details reach the model through that text and nothing else, which is how
+    the dashboard has always worked.
     """
     from apps.creatives.generation import AUTO_MODE_MODEL, MODEL_CREDIT_COST
 
@@ -462,52 +494,92 @@ def generate_modal_view(ws, campaigns, channel_id, max_images=4):
          'value': str(n)}
         for n in range(1, max_images + 1)
     ]
+    count_initial = next((o for o in counts if o['value'] == str(count)), counts[min(1, len(counts) - 1)])
+
+    campaign_options = [
+        {'text': {'type': 'plain_text', 'text': (c.name or 'Untitled')[:75]}, 'value': str(c.id)}
+        for c in campaigns[:100]
+    ]
+    campaign_element = {
+        'type': 'static_select', 'action_id': GEN_ACTIONS[GEN_BLOCK_CAMPAIGN],
+        'placeholder': {'type': 'plain_text', 'text': 'Pick a campaign'},
+        'options': campaign_options,
+    }
+    picked_campaign = next((o for o in campaign_options if o['value'] == str(campaign_id)), None)
+    if picked_campaign:
+        campaign_element['initial_option'] = picked_campaign
+
+    blocks = [
+        {'type': 'context', 'elements': [{'type': 'mrkdwn',
+         'text': f'Workspace *{ws.name}*  ·  {AUTO_MODE_MODEL}  ·  {per_image} credit/image'}]},
+        {
+            'type': 'input', 'block_id': GEN_BLOCK_CAMPAIGN,
+            'label': {'type': 'plain_text', 'text': 'Campaign'},
+            # Re-render on change so the brief list follows the campaign.
+            'dispatch_action': True,
+            'element': campaign_element,
+        },
+    ]
+
+    briefs = briefs or []
+    if briefs:
+        brief_options = [_brief_option(b) for b in briefs[:100]]
+        brief_element = {
+            'type': 'static_select', 'action_id': GEN_ACTIONS[GEN_BLOCK_BRIEF],
+            'placeholder': {'type': 'plain_text', 'text': 'Start from a brief (optional)'},
+            'options': brief_options,
+        }
+        picked_brief = next((o for o in brief_options if o['value'] == str(brief_id)), None)
+        if picked_brief:
+            brief_element['initial_option'] = picked_brief
+        blocks.append({
+            'type': 'input', 'block_id': GEN_BLOCK_BRIEF, 'optional': True,
+            'dispatch_action': True,
+            'label': {'type': 'plain_text', 'text': 'Campaign Intel brief'},
+            'hint': {'type': 'plain_text', 'text': 'Fills the prompt below — edit it freely.'},
+            'element': brief_element,
+        })
+    elif campaign_id:
+        blocks.append({'type': 'context', 'elements': [{'type': 'mrkdwn',
+            'text': '_No Campaign Intel briefs for this campaign yet — '
+                    'run the research from the dashboard to get them._'}]})
+
+    prompt_element = {
+        'type': 'plain_text_input', 'action_id': GEN_ACTIONS[GEN_BLOCK_PROMPT],
+        'multiline': True, 'max_length': 2000,
+        'placeholder': {'type': 'plain_text',
+                        'text': 'e.g. summer promo, bright beach scene, big 200% bonus badge'},
+    }
+    if prompt:
+        prompt_element['initial_value'] = prompt[:2000]
+
+    blocks += [
+        {
+            'type': 'input', 'block_id': GEN_BLOCK_PROMPT,
+            'label': {'type': 'plain_text', 'text': 'What should it show?'},
+            'element': prompt_element,
+        },
+        {
+            'type': 'input', 'block_id': GEN_BLOCK_COUNT,
+            'label': {'type': 'plain_text', 'text': 'How many'},
+            'element': {
+                'type': 'static_select', 'action_id': GEN_ACTIONS[GEN_BLOCK_COUNT],
+                'initial_option': count_initial, 'options': counts,
+            },
+        },
+    ]
+
     return {
         'type': 'modal',
         'callback_id': GENERATE_CALLBACK_ID,
-        # The submission payload says which team and view, but not which
-        # channel the dialog was opened from — carry it ourselves so the
-        # finished images go back to the right conversation.
+        # The payload says which team and view, but not which channel the
+        # dialog was opened from — carry it so the images go back to the right
+        # conversation.
         'private_metadata': channel_id,
         'title': {'type': 'plain_text', 'text': 'Generate creatives'},
         'submit': {'type': 'plain_text', 'text': 'Generate'},
         'close': {'type': 'plain_text', 'text': 'Cancel'},
-        'blocks': [
-            {'type': 'context', 'elements': [{'type': 'mrkdwn',
-             'text': f'Workspace *{ws.name}*  ·  {AUTO_MODE_MODEL}  ·  {per_image} credit/image'}]},
-            {
-                'type': 'input', 'block_id': GEN_BLOCK_CAMPAIGN,
-                'label': {'type': 'plain_text', 'text': 'Campaign'},
-                'element': {
-                    'type': 'static_select', 'action_id': GEN_INPUT_ACTION,
-                    'placeholder': {'type': 'plain_text', 'text': 'Pick a campaign'},
-                    'options': [
-                        {'text': {'type': 'plain_text', 'text': (c.name or 'Untitled')[:75]},
-                         'value': str(c.id)}
-                        for c in campaigns[:100]
-                    ],
-                },
-            },
-            {
-                'type': 'input', 'block_id': GEN_BLOCK_PROMPT,
-                'label': {'type': 'plain_text', 'text': 'What should it show?'},
-                'element': {
-                    'type': 'plain_text_input', 'action_id': GEN_INPUT_ACTION, 'multiline': True,
-                    'max_length': 2000,
-                    'placeholder': {'type': 'plain_text',
-                                    'text': 'e.g. summer promo, bright beach scene, big 200% bonus badge'},
-                },
-            },
-            {
-                'type': 'input', 'block_id': GEN_BLOCK_COUNT,
-                'label': {'type': 'plain_text', 'text': 'How many'},
-                'element': {
-                    'type': 'static_select', 'action_id': GEN_INPUT_ACTION,
-                    'initial_option': counts[1] if len(counts) > 1 else counts[0],
-                    'options': counts,
-                },
-            },
-        ],
+        'blocks': blocks,
     }
 
 

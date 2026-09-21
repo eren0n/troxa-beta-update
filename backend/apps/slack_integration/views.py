@@ -23,6 +23,8 @@ from apps.creatives.rating import apply_rating, toggle_winner
 from .models import SlackInstallation, SlackChannel, ALL_CONTENT_TYPES
 from .services import (
     RATE_ACTION_ID, WINNER_ACTION_ID, refresh_rating_row,
+    GEN_ACTIONS, GEN_BLOCK_BRIEF, GEN_BLOCK_CAMPAIGN, GEN_BLOCK_COUNT, GEN_BLOCK_PROMPT,
+    GENERATE_CALLBACK_ID, briefs_for_campaign, generate_modal_view,
     _post as _post_slack,   # same Slack API helper the notifiers use
 )
 
@@ -504,6 +506,8 @@ class SlackInteractionView(APIView):
 
         action    = actions[0]
         action_id = action.get('action_id')
+        if action_id in (GEN_ACTIONS[GEN_BLOCK_CAMPAIGN], GEN_ACTIONS[GEN_BLOCK_BRIEF]):
+            return self._generate_dialog_changed(payload, action_id)
         if action_id not in (RATE_ACTION_ID, WINNER_ACTION_ID):
             return Response(status=200)
 
@@ -570,11 +574,10 @@ class SlackInteractionView(APIView):
         which is where a credit shortfall belongs — the person can lower the
         count and submit again without retyping the prompt.
         """
-        from apps.creatives.generation import AUTO_MODE_MODEL, start_generation
-        from .services import (
-            GENERATE_CALLBACK_ID, GEN_BLOCK_CAMPAIGN, GEN_BLOCK_COUNT, GEN_BLOCK_PROMPT,
-            GEN_INPUT_ACTION, post_generation_queued,
+        from apps.creatives.generation import (
+            AUTO_MODE_MODEL, DEFAULT_BLEND_WEIGHT, FINGERPRINT_ALWAYS_ON, start_generation,
         )
+        from .services import post_generation_queued
 
         view = payload.get('view') or {}
         if view.get('callback_id') != GENERATE_CALLBACK_ID:
@@ -589,16 +592,11 @@ class SlackInteractionView(APIView):
             return error_on(GEN_BLOCK_PROMPT,
                             'This channel is no longer connected to a Troxa workspace.')
 
-        values = (view.get('state') or {}).get('values') or {}
-
-        def picked(block_id):
-            el = (values.get(block_id) or {}).get(GEN_INPUT_ACTION) or {}
-            return (el.get('selected_option') or {}).get('value') or el.get('value') or ''
-
-        campaign_id = picked(GEN_BLOCK_CAMPAIGN)
-        prompt      = (picked(GEN_BLOCK_PROMPT) or '').strip()
+        state = self._dialog_state(view)
+        campaign_id = state['campaign_id']
+        prompt      = state['prompt'].strip()
         try:
-            count = int(picked(GEN_BLOCK_COUNT) or 2)
+            count = int(state['count'] or 2)
         except ValueError:
             count = 2
 
@@ -620,9 +618,13 @@ class SlackInteractionView(APIView):
                 'extra_prompt': prompt,
                 'num_images': count,
                 # The modal doesn't ask for these, so it takes what the Generate
-                # tab sends in auto mode — same three answers, same job.
+                # tab sends in auto mode — same three answers, same job. The
+                # fingerprint especially: without it the images come back
+                # generic instead of on-brand.
                 'model_name': AUTO_MODE_MODEL,
                 'generation_mode': 'auto',
+                'use_fingerprint': FINGERPRINT_ALWAYS_ON,
+                'blend_weight': DEFAULT_BLEND_WEIGHT,
                 'actor': actor,
             },
             user=None, origin='slack', origin_channel=sc.channel_id,
@@ -638,4 +640,67 @@ class SlackInteractionView(APIView):
             kwargs={'actor': actor},
             daemon=True,
         ).start()
+        return Response(status=200)
+
+    @staticmethod
+    def _dialog_state(view):
+        """What the person has filled in so far, so a re-render doesn't lose it."""
+        values = (view.get('state') or {}).get('values') or {}
+
+        def picked(block_id):
+            el = (values.get(block_id) or {}).get(GEN_ACTIONS[block_id]) or {}
+            return (el.get('selected_option') or {}).get('value') or el.get('value') or ''
+
+        return {
+            'campaign_id': picked(GEN_BLOCK_CAMPAIGN),
+            'brief_id':    picked(GEN_BLOCK_BRIEF),
+            'prompt':      picked(GEN_BLOCK_PROMPT),
+            'count':       picked(GEN_BLOCK_COUNT) or '2',
+        }
+
+    def _generate_dialog_changed(self, payload, action_id):
+        """
+        Someone picked a campaign or a brief in the dialog — re-render it.
+
+        Slack can't populate one select from another on its own, so the brief
+        list is rebuilt for the chosen campaign here. Picking a brief drops its
+        extra_prompt into the prompt box, which is exactly what the Generate
+        tab's brief cards do; it stays editable afterwards.
+        """
+        view = payload.get('view') or {}
+        if view.get('callback_id') != GENERATE_CALLBACK_ID:
+            return Response(status=200)
+
+        sc = _channel_for(((payload.get('team') or {}).get('id') or '',
+                           view.get('private_metadata') or ''))
+        if not sc:
+            return Response(status=200)
+
+        ws = sc.workspace
+        state = self._dialog_state(view)
+        campaign = ws.campaigns.filter(id=state['campaign_id']).first() if state['campaign_id'] else None
+        briefs = briefs_for_campaign(campaign)
+
+        brief_id = state['brief_id']
+        prompt = state['prompt']
+        if action_id == GEN_ACTIONS[GEN_BLOCK_CAMPAIGN]:
+            # Briefs belong to a campaign, so a campaign change drops the
+            # selection rather than leaving a brief from the previous one.
+            brief_id = ''
+        else:
+            chosen = next((b for b in briefs if str(b.get('id')) == str(brief_id)), None)
+            if chosen:
+                prompt = chosen.get('extra_prompt') or prompt
+
+        result = _post_slack(sc.installation.bot_token, 'views.update', {
+            'view_id': view.get('id'),
+            'hash': view.get('hash'),
+            'view': generate_modal_view(
+                ws, list(ws.campaigns.all()[:100]), sc.channel_id,
+                campaign_id=state['campaign_id'], briefs=briefs, brief_id=brief_id,
+                prompt=prompt, count=state['count'],
+            ),
+        })
+        if not result.get('ok'):
+            logger.warning('slack.views_update_failed error=%s', result.get('error'))
         return Response(status=200)
