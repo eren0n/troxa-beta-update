@@ -338,6 +338,16 @@ def _generate_worker(job_id):
         job.current_step = 'done'
         job.save(update_fields=['status', 'current_step'])
 
+        # A job requested from a Slack channel reports back there, whether or
+        # not that channel auto-posts creatives — somebody asked for these in
+        # that conversation and is waiting on them.
+        if job.origin == 'slack' and job.origin_channel:
+            try:
+                from apps.slack_integration.services import post_generation_result
+                post_generation_result(job, list(job.creatives.all()))
+            except Exception:
+                logger.exception('slack.generation_result_post_failed job=%s', job.pk)
+
         # Quality evaluation — create pending records immediately, evaluate async
         from .models import CreativeQualityScore
         for cid in saved_creative_ids:
@@ -368,6 +378,13 @@ def _generate_worker(job_id):
         job.current_step = 'error'
         job.error_message = str(e)[:500]
         job.save(update_fields=['status', 'current_step', 'error_message'])
+        # Whoever asked for this in Slack has no other way to find out.
+        if job.origin == 'slack' and job.origin_channel:
+            try:
+                from apps.slack_integration.services import post_generation_failed
+                post_generation_failed(job, e)
+            except Exception:
+                logger.exception('slack.generation_failure_post_failed job=%s', job_id)
 
 
 def _set_step(job, status, step):

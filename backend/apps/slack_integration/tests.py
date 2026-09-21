@@ -206,3 +206,184 @@ class SlackRatingTests(TestCase):
         self.assertEqual(blocks[0]['block_id'], f'rate:{self.creative.id}')
         self.assertIn('4/10', blocks[1]['elements'][0]['text'])
         self.assertEqual(len(blocks), 3)   # no duplicate status line
+
+
+@override_settings(SLACK_SIGNING_SECRET=SECRET)
+class SlackGenerateTests(TestCase):
+    """/troxa generate: opening the dialog, and what submitting it builds."""
+
+    CMD_URL = '/api/slack/commands/'
+
+    def setUp(self):
+        from apps.billing.models import Plan, Subscription
+        from apps.brand_kit.models import Campaign
+
+        self.user = User.objects.create_user(username='g', email='g@h.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.user)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.user, role='owner')
+        self.plan = Plan.objects.create(name='Team', tier='team', monthly_credits=100)
+        Subscription.objects.create(workspace=self.ws, plan=self.plan)
+        self.inst = SlackInstallation.objects.create(team_id='T1', bot_token='xoxb-1')
+        self.chan = SlackChannel.objects.create(
+            workspace=self.ws, installation=self.inst, channel_id='C1',
+            # deliberately empty: a requested generation must report back here
+            # regardless of what this channel auto-posts.
+            content_types=[], auto_post_types=[],
+        )
+        self.campaign = Campaign.objects.create(workspace=self.ws, name='Summer Push')
+
+    # ── /troxa generate ────────────────────────────────────────────────────
+    def command(self, text='generate', channel='C1', team='T1'):
+        body = (f'team_id={team}&channel_id={channel}&user_id=U9&user_name=eren'
+                f'&trigger_id=TRIG&text={text}')
+        return self.client.post(self.CMD_URL, data=body,
+                                content_type='application/x-www-form-urlencoded',
+                                **sign(body))
+
+    def test_generate_opens_a_modal_for_a_connected_channel(self):
+        with mock.patch('apps.slack_integration.views._post_slack',
+                        return_value={'ok': True}) as api:
+            resp = self.command()
+        self.assertEqual(resp.status_code, 200)
+        method, sent = api.call_args.args[1], api.call_args.args[2]
+        self.assertEqual(method, 'views.open')
+        self.assertEqual(sent['trigger_id'], 'TRIG')
+        view = sent['view']
+        self.assertEqual(view['private_metadata'], 'C1')          # where results go back
+        blocks = {b.get('block_id'): b for b in view['blocks'] if b.get('block_id')}
+        self.assertEqual(
+            blocks['campaign']['element']['options'][0]['value'], str(self.campaign.id))
+        self.assertEqual(len(blocks['count']['element']['options']), 4)
+
+    def test_generate_in_an_unconnected_channel_explains_setup(self):
+        with mock.patch('apps.slack_integration.views._post_slack') as api:
+            resp = self.command(channel='C-NOPE')
+        self.assertIn('troxa setup', resp.json()['text'])
+        api.assert_not_called()
+
+    def test_generate_without_a_campaign_says_so(self):
+        self.campaign.delete()
+        with mock.patch('apps.slack_integration.views._post_slack') as api:
+            resp = self.command()
+        self.assertIn('no campaigns', resp.json()['text'])
+        api.assert_not_called()
+
+    # ── modal submission ───────────────────────────────────────────────────
+    def submit(self, campaign_id=None, prompt='beach scene, 200% bonus', count='2',
+               callback='troxa_generate', channel='C1'):
+        payload = {
+            'type': 'view_submission',
+            'team': {'id': 'T1'},
+            'user': {'id': 'U9', 'username': 'eren'},
+            'view': {
+                'callback_id': callback,
+                'private_metadata': channel,
+                'state': {'values': {
+                    'campaign': {'value': {'selected_option': {
+                        'value': str(campaign_id or self.campaign.id)}}},
+                    'prompt': {'value': {'value': prompt}},
+                    'count': {'value': {'selected_option': {'value': count}}},
+                }},
+            },
+        }
+        body = 'payload=' + json.dumps(payload)
+        return self.client.post(URL, data=body,
+                                content_type='application/x-www-form-urlencoded',
+                                **sign(body))
+
+    def test_submission_queues_a_job_attributed_to_slack(self):
+        from apps.creatives.models import GenerationJob
+        from apps.creatives.generation import AUTO_MODE_MODEL
+        with mock.patch('apps.creatives.services.generate_job_async') as run, \
+             mock.patch('apps.slack_integration.services._post'):
+            resp = self.submit(count='3')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, b'')          # empty body closes the modal
+        job = GenerationJob.objects.get()
+        self.assertEqual(job.origin, 'slack')
+        self.assertEqual(job.origin_channel, 'C1')   # results go back here
+        self.assertIsNone(job.created_by)            # no slack-to-troxa mapping
+        self.assertEqual(job.num_images, 3)
+        self.assertEqual(job.extra_prompt, 'beach scene, 200% bonus')
+        self.assertEqual(job.campaign, self.campaign)
+        self.assertEqual(job.model_name, AUTO_MODE_MODEL)
+        self.assertEqual(job.generation_mode, 'auto')
+        run.assert_called_once_with(job.id)
+
+    def test_insufficient_credits_keeps_the_modal_open(self):
+        from apps.creatives.models import GenerationJob
+        self.plan.monthly_credits = 2      # 3 images x 2 credits = 6 needed
+        self.plan.save()
+        with mock.patch('apps.creatives.services.generate_job_async') as run:
+            resp = self.submit(count='3')
+        body = resp.json()
+        self.assertEqual(body['response_action'], 'errors')
+        self.assertIn('count', body['errors'])
+        self.assertFalse(GenerationJob.objects.exists())
+        run.assert_not_called()
+
+    def test_unlimited_plan_skips_the_credit_check(self):
+        from apps.creatives.models import GenerationJob
+        self.plan.monthly_credits = 0
+        self.plan.unlimited_usage = True
+        self.plan.save()
+        with mock.patch('apps.creatives.services.generate_job_async'), \
+             mock.patch('apps.slack_integration.services._post'):
+            self.submit(count='4')
+        self.assertEqual(GenerationJob.objects.count(), 1)
+
+    def test_blank_prompt_is_rejected(self):
+        from apps.creatives.models import GenerationJob
+        resp = self.submit(prompt='   ')
+        self.assertEqual(resp.json()['errors']['prompt'],
+                         'Say what the creative should show.')
+        self.assertFalse(GenerationJob.objects.exists())
+
+    def test_campaign_from_another_workspace_is_rejected(self):
+        from apps.brand_kit.models import Campaign
+        from apps.creatives.models import GenerationJob
+        other_owner = User.objects.create_user(username='o', email='o@p.com', password='x')
+        other_ws = Workspace.objects.create(name='Other', owner=other_owner)
+        foreign = Campaign.objects.create(workspace=other_ws, name='Theirs')
+        resp = self.submit(campaign_id=foreign.id)
+        self.assertIn('campaign', resp.json()['errors'])
+        self.assertFalse(GenerationJob.objects.exists())
+
+    def test_submission_from_an_unknown_channel_is_rejected(self):
+        from apps.creatives.models import GenerationJob
+        resp = self.submit(channel='C-NOPE')
+        self.assertEqual(resp.json()['response_action'], 'errors')
+        self.assertFalse(GenerationJob.objects.exists())
+
+    def test_unrelated_modal_is_ignored(self):
+        resp = self.submit(callback='some_other_modal')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, b'')
+
+    # ── results going back ─────────────────────────────────────────────────
+    def test_results_post_back_to_the_requesting_channel_with_rating_rows(self):
+        from apps.creatives.models import GeneratedCreative, GenerationJob
+        from apps.slack_integration.services import post_generation_result
+        job = GenerationJob.objects.create(
+            workspace=self.ws, campaign=self.campaign, origin='slack',
+            origin_channel='C1', num_images=1, model_name='GPT Image 2')
+        c = GeneratedCreative.objects.create(
+            workspace=self.ws, job=job, name='Shot', image_url='https://cdn/a.png')
+        with mock.patch('apps.slack_integration.services._post') as api:
+            post_generation_result(job, [c])
+        sent = api.call_args.args[2]
+        self.assertEqual(sent['channel'], 'C1')
+        ids = [b.get('block_id') for b in sent['blocks']]
+        self.assertIn(f'rate:{c.id}', ids)           # rateable straight away
+        c.refresh_from_db()
+        self.assertTrue(c.tags.filter(name='Slack Posted').exists())
+
+    def test_gallery_credits_slack_for_the_generation(self):
+        from apps.creatives.models import GeneratedCreative, GenerationJob
+        from apps.creatives.serializers import GeneratedCreativeSerializer
+        job = GenerationJob.objects.create(workspace=self.ws, origin='slack', origin_channel='C1')
+        c = GeneratedCreative.objects.create(
+            workspace=self.ws, job=job, name='Shot', image_url='https://cdn/a.png')
+        data = GeneratedCreativeSerializer(c).data
+        self.assertEqual(data['created_by_name'], 'Slack')
+        self.assertEqual(data['generated_by_name'], 'Slack')

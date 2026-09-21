@@ -63,10 +63,10 @@ def _validate_source_image_url(url):
 
 from apps.activity.utils import log_event
 from apps.brand_kit.models import Logo, Disclaimer, Campaign, Character
-from apps.billing.models import Subscription
 
 from .models import GenerationJob, GeneratedCreative, VideoJob, LogoJob, LogoJobImage, CreativeTag
 from .rating import apply_rating
+from .generation import credit_error, start_generation
 from .serializers import (
     GenerationJobSerializer, GeneratedCreativeSerializer,
     VideoJobSerializer, VideoJobDetailSerializer,
@@ -80,39 +80,18 @@ from .services import (
 )
 
 
-MODEL_CREDIT_COST = {
-    'Nano Banana Pro':  2,
-    'GPT Image 2':      2,
-    'Seedream 5.0 Pro': 2,
-}
-
-
 def _check_credits(ws, num_images, model_name='Nano Banana 2'):
-    """Return (ok, Response_or_None). Blocks if monthly available credits < required."""
-    cost_per_img = MODEL_CREDIT_COST.get(model_name, 1)
-    num_images = num_images * cost_per_img
-    try:
-        sub = ws.subscription
-    except Subscription.DoesNotExist:
-        return False, Response(
-            {'error': 'insufficient_credits', 'detail': 'No credit account found. Please contact support.'},
-            status=402
-        )
-    # Enterprise / unlimited_usage plans bypass the credit check entirely
-    if sub.plan.unlimited_usage:
-        return True, None
-    available = sub.credits_available
-    if available < num_images:
-        return False, Response(
-            {
-                'error': 'insufficient_credits',
-                'detail': f'You need {num_images} credit(s) but only have {available} left this month. Upgrade your plan or add bonus credits.',
-                'available': available,
-                'required': num_images,
-                'upgrade_required': True,
-            },
-            status=402
-        )
+    """
+    Return (ok, Response_or_None). Blocks if monthly available credits < required.
+
+    The rules themselves live in generation.credit_error so the Slack modal can
+    apply the same ones without going through DRF; this only dresses the result
+    up as an API response.
+    """
+    err = credit_error(ws, num_images, model_name)
+    if err:
+        return False, Response({k: v for k, v in err.items() if k != 'status'},
+                               status=err.get('status', 402))
     return True, None
 
 
@@ -126,70 +105,10 @@ class GenerateView(APIView):
         if not require_editor(request.user, ws):
             return Response({'detail': 'Your role does not have permission to generate creatives.'}, status=403)
 
-        num_images = int(request.data.get('num_images', 2))
-        model_name = request.data.get('model_name', 'Nano Banana 2')
-        ok, err = _check_credits(ws, num_images, model_name)
-        if not ok:
-            return err
-
-        d = request.data
-
-        # Resolve FKs
-        campaign = None
-        if d.get('campaign_id'):
-            campaign = ws.campaigns.filter(id=d['campaign_id']).first()
-
-        disclaimer = None
-        if d.get('disclaimer_id'):
-            disclaimer = ws.disclaimers.filter(id=d['disclaimer_id']).first()
-
-        logo = None
-        if d.get('logo_id'):
-            logo = ws.logos.filter(id=d['logo_id']).first()
-
-        character = None
-        if d.get('character_id'):
-            character = ws.characters.filter(id=d['character_id']).first()
-
-        job = GenerationJob.objects.create(
-            workspace=ws,
-            created_by=request.user,
-            campaign=campaign,
-            disclaimer=disclaimer,
-            model_name=d.get('model_name', 'Nano Banana 2'),
-            aspect_ratio=d.get('aspect_ratio', '1:1'),
-            resolution=d.get('resolution', '1K'),
-            num_images=num_images,
-            output_format=d.get('output_format', 'png'),
-            generate_new_character=bool(d.get('generate_new_character', False)),
-            image_size=d.get('image_size') or '',
-            image_quality=d.get('image_quality') or 'high',
-            style=d.get('style') or '',
-            extra_prompt=d.get('extra_prompt') or '',
-            negative_prompt=d.get('negative_prompt') or '',
-            use_fingerprint=bool(d.get('use_fingerprint', False)),
-            blend_weight=int(d.get('blend_weight', 50)),
-            simplicity_weight=int(d['simplicity_weight']) if d.get('simplicity_mode') and d.get('simplicity_weight') is not None else None,
-            generation_mode=d.get('generation_mode', 'auto'),
-            logo=logo,
-            character=character,
-        )
-
-        static_ids = d.get('static_ids', [])
-        if static_ids:
-            references = ws.creatives.filter(id__in=static_ids, media_type='Photo')
-            job.reference_creatives.set(references)
-
-        # If the caller supplies a pre-built master prompt (from Prompt Architect),
-        # store it now so the generation worker skips the DNA build step entirely.
-        prebuilt = d.get('prebuilt_master_prompt') or ''
-        if prebuilt.strip():
-            job.master_prompt = prebuilt.strip()
-            job.save(update_fields=['master_prompt'])
-
-        log_event(ws, request.user, 'generation_started', f'Generation job #{job.id} queued')
-        generate_job_async(job.id)
-
+        job, err = start_generation(ws, request.data, user=request.user, origin='dashboard')
+        if err:
+            return Response({k: v for k, v in err.items() if k != 'status'},
+                            status=err.get('status', 402))
         return Response(GenerationJobSerializer(job).data, status=202)
 
 

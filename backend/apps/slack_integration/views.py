@@ -21,7 +21,10 @@ from django.core.exceptions import ValidationError
 
 from apps.creatives.rating import apply_rating, toggle_winner
 from .models import SlackInstallation, SlackChannel, ALL_CONTENT_TYPES
-from .services import RATE_ACTION_ID, WINNER_ACTION_ID, refresh_rating_row
+from .services import (
+    RATE_ACTION_ID, WINNER_ACTION_ID, refresh_rating_row,
+    _post as _post_slack,   # same Slack API helper the notifiers use
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,8 @@ class SlackCommandView(APIView):
             return _handle_setup(request, workspace_key)
         if cmd == 'disconnect':
             return _handle_disconnect(request)
+        if cmd == 'generate':
+            return _handle_generate_command(request)
         return _help_response()
 
 
@@ -134,6 +139,7 @@ def _help_response():
         'text': (
             ':wave: *Troxa Commands*\n'
             '• `/troxa setup <your-troxa-key>` — Connect this channel to your Troxa workspace\n'
+            '• `/troxa generate` — Generate creatives without leaving Slack\n'
             '• `/troxa disconnect` — Disconnect this channel\n\n'
             'Find your Troxa Key in *Dashboard → Integrations → Slack*.'
         ),
@@ -188,6 +194,54 @@ def _handle_setup(request, workspace_key):
             f'You can customize which content types are posted from *Dashboard → Integrations → Slack*.'
         ),
     })
+
+
+def _channel_for(request_or_ids):
+    """Resolve the SlackChannel a command or interaction came from, or None."""
+    team_id, channel_id = request_or_ids
+    return (SlackChannel.objects
+            .filter(channel_id=channel_id, installation__team_id=team_id)
+            .select_related('installation', 'workspace').first())
+
+
+def _handle_generate_command(request):
+    """
+    Open the generate dialog.
+
+    Slack invalidates trigger_id after a few seconds, so views.open is called
+    inline here rather than handed to a thread.
+    """
+    from .services import generate_modal_view
+
+    sc = _channel_for((request.data.get('team_id', ''), request.data.get('channel_id', '')))
+    if not sc:
+        return Response({
+            'response_type': 'ephemeral',
+            'text': (':x: This channel isn\'t connected to a Troxa workspace yet.\n'
+                     'Run `/troxa setup <your-troxa-key>` first — your key is in '
+                     '*Dashboard → Integrations → Slack*.'),
+        })
+
+    ws = sc.workspace
+    campaigns = list(ws.campaigns.all()[:100])
+    if not campaigns:
+        return Response({
+            'response_type': 'ephemeral',
+            'text': (f':x: *{ws.name}* has no campaigns yet — a creative is always generated '
+                     'against one. Create a campaign in *Dashboard → Brand Kit* first.'),
+        })
+
+    result = _post_slack(sc.installation.bot_token, 'views.open', {
+        'trigger_id': request.data.get('trigger_id', ''),
+        'view': generate_modal_view(ws, campaigns, sc.channel_id),
+    })
+    if not result.get('ok'):
+        logger.warning('slack.views_open_failed error=%s', result.get('error'))
+        return Response({
+            'response_type': 'ephemeral',
+            'text': f':x: Could not open the generate dialog ({result.get("error", "unknown error")}).',
+        })
+    return Response(status=200)
 
 
 def _handle_disconnect(request):
@@ -439,6 +493,8 @@ class SlackInteractionView(APIView):
         except (TypeError, ValueError):
             return Response(status=400)
 
+        if payload.get('type') == 'view_submission':
+            return self._generate_submission(payload)
         if payload.get('type') != 'block_actions':
             return Response(status=200)
 
@@ -503,4 +559,83 @@ class SlackInteractionView(APIView):
                 daemon=True,
             ).start()
 
+        return Response(status=200)
+
+    def _generate_submission(self, payload):
+        """
+        Someone submitted the /troxa generate dialog.
+
+        Returning an empty 200 closes the modal; returning a response_action of
+        'errors' keeps it open with the message pinned to one of its inputs,
+        which is where a credit shortfall belongs — the person can lower the
+        count and submit again without retyping the prompt.
+        """
+        from apps.creatives.generation import AUTO_MODE_MODEL, start_generation
+        from .services import (
+            GENERATE_CALLBACK_ID, GEN_BLOCK_CAMPAIGN, GEN_BLOCK_COUNT, GEN_BLOCK_PROMPT,
+            GEN_INPUT_ACTION, post_generation_queued,
+        )
+
+        view = payload.get('view') or {}
+        if view.get('callback_id') != GENERATE_CALLBACK_ID:
+            return Response(status=200)
+
+        def error_on(block_id, message):
+            return Response({'response_action': 'errors', 'errors': {block_id: message[:150]}})
+
+        sc = _channel_for(((payload.get('team') or {}).get('id') or '',
+                           view.get('private_metadata') or ''))
+        if not sc:
+            return error_on(GEN_BLOCK_PROMPT,
+                            'This channel is no longer connected to a Troxa workspace.')
+
+        values = (view.get('state') or {}).get('values') or {}
+
+        def picked(block_id):
+            el = (values.get(block_id) or {}).get(GEN_INPUT_ACTION) or {}
+            return (el.get('selected_option') or {}).get('value') or el.get('value') or ''
+
+        campaign_id = picked(GEN_BLOCK_CAMPAIGN)
+        prompt      = (picked(GEN_BLOCK_PROMPT) or '').strip()
+        try:
+            count = int(picked(GEN_BLOCK_COUNT) or 2)
+        except ValueError:
+            count = 2
+
+        if not prompt:
+            return error_on(GEN_BLOCK_PROMPT, 'Say what the creative should show.')
+
+        ws = sc.workspace
+        if not ws.campaigns.filter(id=campaign_id).exists():
+            return error_on(GEN_BLOCK_CAMPAIGN, 'That campaign no longer exists.')
+
+        slack_user = payload.get('user') or {}
+        actor = '@' + (slack_user.get('username') or slack_user.get('name')
+                       or slack_user.get('id') or 'slack')
+
+        job, err = start_generation(
+            ws,
+            {
+                'campaign_id': campaign_id,
+                'extra_prompt': prompt,
+                'num_images': count,
+                # The modal doesn't ask for these, so it takes what the Generate
+                # tab sends in auto mode — same three answers, same job.
+                'model_name': AUTO_MODE_MODEL,
+                'generation_mode': 'auto',
+                'actor': actor,
+            },
+            user=None, origin='slack', origin_channel=sc.channel_id,
+        )
+        if err:
+            return error_on(GEN_BLOCK_COUNT, err.get('detail', 'Could not start the generation.'))
+
+        # Images take a while; say so in the channel now, and the worker posts
+        # the results (or the failure) there when it lands.
+        threading.Thread(
+            target=post_generation_queued,
+            args=(sc, sc.installation.bot_token, job),
+            kwargs={'actor': actor},
+            daemon=True,
+        ).start()
         return Response(status=200)

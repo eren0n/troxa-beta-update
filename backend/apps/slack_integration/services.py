@@ -6,6 +6,8 @@ never breaks a generation job.
 import requests as http_requests
 from django.conf import settings
 
+from .models import SlackChannel
+
 SLACK_API = 'https://slack.com/api'
 
 
@@ -431,6 +433,156 @@ def notify_slack_edit(workspace, creative, user=None):
         })
 
     _mark_posted([str(creative.id)])
+
+
+GENERATE_CALLBACK_ID = 'troxa_generate'
+# Modal inputs. The block ids are also where a validation error gets attached,
+# so they have to match what the submission handler reports against.
+GEN_BLOCK_CAMPAIGN = 'campaign'
+GEN_BLOCK_PROMPT   = 'prompt'
+GEN_BLOCK_COUNT    = 'count'
+GEN_INPUT_ACTION   = 'value'
+
+
+def generate_modal_view(ws, campaigns, channel_id, max_images=4):
+    """
+    The /troxa generate dialog.
+
+    Deliberately short: campaign, prompt, how many. Everything else — model,
+    ratio, resolution, format — takes the same defaults the Generate tab uses
+    in auto mode, so a Slack request and a dashboard request with the same
+    three answers produce the same job.
+    """
+    from apps.creatives.generation import AUTO_MODE_MODEL, MODEL_CREDIT_COST
+
+    per_image = MODEL_CREDIT_COST.get(AUTO_MODE_MODEL, 1)
+    counts = [
+        {'text': {'type': 'plain_text', 'text': f'{n} image{"s" if n > 1 else ""}'
+                                                f'  ·  {n * per_image} credits'},
+         'value': str(n)}
+        for n in range(1, max_images + 1)
+    ]
+    return {
+        'type': 'modal',
+        'callback_id': GENERATE_CALLBACK_ID,
+        # The submission payload says which team and view, but not which
+        # channel the dialog was opened from — carry it ourselves so the
+        # finished images go back to the right conversation.
+        'private_metadata': channel_id,
+        'title': {'type': 'plain_text', 'text': 'Generate creatives'},
+        'submit': {'type': 'plain_text', 'text': 'Generate'},
+        'close': {'type': 'plain_text', 'text': 'Cancel'},
+        'blocks': [
+            {'type': 'context', 'elements': [{'type': 'mrkdwn',
+             'text': f'Workspace *{ws.name}*  ·  {AUTO_MODE_MODEL}  ·  {per_image} credit/image'}]},
+            {
+                'type': 'input', 'block_id': GEN_BLOCK_CAMPAIGN,
+                'label': {'type': 'plain_text', 'text': 'Campaign'},
+                'element': {
+                    'type': 'static_select', 'action_id': GEN_INPUT_ACTION,
+                    'placeholder': {'type': 'plain_text', 'text': 'Pick a campaign'},
+                    'options': [
+                        {'text': {'type': 'plain_text', 'text': (c.name or 'Untitled')[:75]},
+                         'value': str(c.id)}
+                        for c in campaigns[:100]
+                    ],
+                },
+            },
+            {
+                'type': 'input', 'block_id': GEN_BLOCK_PROMPT,
+                'label': {'type': 'plain_text', 'text': 'What should it show?'},
+                'element': {
+                    'type': 'plain_text_input', 'action_id': GEN_INPUT_ACTION, 'multiline': True,
+                    'max_length': 2000,
+                    'placeholder': {'type': 'plain_text',
+                                    'text': 'e.g. summer promo, bright beach scene, big 200% bonus badge'},
+                },
+            },
+            {
+                'type': 'input', 'block_id': GEN_BLOCK_COUNT,
+                'label': {'type': 'plain_text', 'text': 'How many'},
+                'element': {
+                    'type': 'static_select', 'action_id': GEN_INPUT_ACTION,
+                    'initial_option': counts[1] if len(counts) > 1 else counts[0],
+                    'options': counts,
+                },
+            },
+        ],
+    }
+
+
+def post_generation_queued(sc, token, job, actor=None):
+    """Let the channel know the request landed — the images take a while."""
+    campaign = job.campaign.name if job.campaign else 'Creatives'
+    _post(token, 'chat.postMessage', {
+        'channel': sc.channel_id,
+        'text': f':hourglass_flowing_sand: Generating {job.num_images} creative(s) — {campaign}',
+        'blocks': [{'type': 'section', 'text': {'type': 'mrkdwn', 'text': (
+            f':hourglass_flowing_sand: *Generating {job.num_images} '
+            f'creative{"s" if job.num_images > 1 else ""}*\n'
+            f'*Campaign:* {campaign}  |  *Model:* {job.model_name}  |  *Format:* {job.aspect_ratio}'
+            + (f'\n*Requested by:* {actor}' if actor else '')
+        )}}],
+    })
+
+
+def post_generation_result(job, creatives):
+    """
+    Post a Slack-requested generation's output back to the channel it came from.
+
+    Unlike notify_slack_generation this ignores the channel's auto-post
+    settings: somebody asked for these images in that conversation and is
+    waiting on them.
+    """
+    sc = (SlackChannel.objects
+          .filter(channel_id=job.origin_channel, workspace=job.workspace)
+          .select_related('installation').first())
+    if not sc:
+        return
+    creatives = [c for c in creatives if _creative_url(c)]
+    if not creatives:
+        return
+
+    campaign = job.campaign.name if job.campaign else 'Creatives'
+    count    = len(creatives)
+    base_url = settings.SITE_BASE_URL
+
+    blocks = [{'type': 'section', 'text': {'type': 'mrkdwn', 'text': (
+        f':sparkles: *{count} creative{"s" if count > 1 else ""} ready*\n'
+        f'*Campaign:* {campaign}  |  *Model:* {job.model_name}  |  *Format:* {job.aspect_ratio}'
+    )}}]
+    for i, c in enumerate(creatives[:4], 1):
+        blocks.extend(_creative_blocks(c, f'Variant {i}', f'{campaign} — Variant {i}'))
+    if count > 4:
+        blocks.append({'type': 'context', 'elements': [{'type': 'mrkdwn',
+            'text': f'_+{count - 4} more in your <{base_url}/dashboard|Troxa dashboard>_'}]})
+    blocks.append({'type': 'actions', 'elements': [{
+        'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
+        'url': f'{base_url}/dashboard', 'style': 'primary',
+    }]})
+
+    _post(sc.installation.bot_token, 'chat.postMessage', {
+        'channel': sc.channel_id,
+        'text': f'{count} creative{"s" if count > 1 else ""} ready — {campaign}',
+        'blocks': blocks,
+    })
+    _mark_posted([str(c.id) for c in creatives])
+
+
+def post_generation_failed(job, error_msg):
+    """A failed Slack-requested job has to say so, or the channel waits forever."""
+    sc = (SlackChannel.objects
+          .filter(channel_id=job.origin_channel, workspace=job.workspace)
+          .select_related('installation').first())
+    if not sc:
+        return
+    campaign = job.campaign.name if job.campaign else 'Creatives'
+    _post(sc.installation.bot_token, 'chat.postMessage', {
+        'channel': sc.channel_id,
+        'text': f':x: Generation failed — {campaign}',
+        'blocks': [{'type': 'section', 'text': {'type': 'mrkdwn',
+            'text': f':x: *Generation failed* — {campaign}\n```{str(error_msg)[:300]}```'}}],
+    })
 
 
 def post_creatives_to_channel(sc, token, creatives):
