@@ -6,6 +6,10 @@ import { buildGalleryParams } from './creativeFilters';
 // page that lists/pickers creatives (gallery, edit, make-video) so infinite
 // scroll, filtering, and sorting all hit the backend instead of loading
 // everything up front and slicing client-side.
+// How long to leave the gallery alone after a refresh before another
+// window-focus is allowed to trigger one.
+const REFRESH_THROTTLE_MS = 10_000;
+
 export function useCreativeGallery(filters, allTags, { pageSize = 12 } = {}) {
   const [creatives, setCreatives] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,47 @@ export function useCreativeGallery(filters, allTags, { pageSize = 12 } = {}) {
       .finally(() => { if (fetchId === fetchIdRef.current) setLoading(false); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, allTags, pageSize, refreshKey]);
+
+  // Someone else's rating, rename or tag change never reached a screen that
+  // already had the gallery open: it is fetched on mount and then only again
+  // when the filters change. Coming back to the tab re-reads the pages already
+  // loaded and swaps in what the server now says — which is the moment anyone
+  // would notice a colleague's rating. Throttled, because switching windows is
+  // something people do constantly.
+  const syncLoaded = useCallback(() => {
+    const pages = pageRef.current;
+    const fetchId = fetchIdRef.current;
+    Promise.all(
+      Array.from({ length: pages }, (_, i) => creativesApi.gallery({
+        ...buildGalleryParams(filters, allTags), page: i + 1, page_size: pageSize,
+      }))
+    ).then((results) => {
+      if (fetchId !== fetchIdRef.current) return;   // filters moved on; that fetch wins
+      const merged = results.flatMap(r => unpack(r).list);
+      setCreatives(normalize(merged));
+      setHasMore(unpack(results[results.length - 1]).hasMore);
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, allTags, pageSize]);
+
+  const syncRef = useRef(syncLoaded);
+  useEffect(() => { syncRef.current = syncLoaded; }, [syncLoaded]);
+
+  useEffect(() => {
+    let last = Date.now();
+    const onWake = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (Date.now() - last < REFRESH_THROTTLE_MS) return;
+      last = Date.now();
+      syncRef.current();
+    };
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+    return () => {
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
+    };
+  }, []);
 
   const loadMore = useCallback(() => {
     if (loadingMore || loading || !hasMore) return;
