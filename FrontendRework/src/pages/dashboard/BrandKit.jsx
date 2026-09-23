@@ -2177,12 +2177,12 @@ function BrandKitPage() {
                               rows={2}
                               value={campaignEditFields.campaign_brief}
                               onChange={(e) => setCampaignEditFields(prev => ({ ...prev, campaign_brief: e.target.value }))}
-                              placeholder="Kampanya brief (optional)"
+                              placeholder="Campaign brief (optional)"
                               className="w-full bg-[#0c0f1a] border border-white/8 focus:border-blue-500 rounded-lg px-3 py-2 text-xs text-white outline-none transition-all resize-none placeholder:text-slate-700"
                             />
                             <div className="flex gap-1.5">
                               <button onClick={() => saveEditing(camp.id)} className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-lg transition-all flex items-center justify-center gap-1">
-                                <Check className="w-3 h-3" /> Kaydet
+                                <Check className="w-3 h-3" /> Save
                               </button>
                               <button onClick={cancelEditing} className="p-1.5 bg-white/5 border border-white/6 text-slate-500 hover:text-white rounded-lg transition-all">
                                 <X className="w-3 h-3" />
