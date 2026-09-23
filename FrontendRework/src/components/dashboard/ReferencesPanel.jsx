@@ -1,23 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, ImageIcon, Maximize2, X } from 'lucide-react';
+import { ImageIcon, Maximize2, X } from 'lucide-react';
 import { GLASS_STYLE } from '../ui/GlassCard';
 import { creativesApi } from '../../lib/api';
 import { CreativeImg } from '../ui/CreativeImg';
-import { getPortalRoot } from '../../lib/portalRoot';
+import CreativeLightbox from './CreativeLightbox';
 import UploadCreativeButton from './UploadCreativeButton';
 
 const PAGE_SIZE = 24;
 
-function Row({ label, value }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-[10px] text-slate-600 shrink-0">{label}</span>
-      <span className="text-[11px] text-slate-300 text-right break-words">{value}</span>
-    </div>
-  );
-}
 
 /**
  * Brand Kit → References.
@@ -32,7 +23,10 @@ export default function ReferencesPanel({ isEditor }) {
   const [refs, setRefs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
-  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [lightbox, setLightbox] = useState(null);   // { items, index }
+  const [mediaDims, setMediaDims] = useState(null);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const [downloadingUrl, setDownloadingUrl] = useState(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -77,24 +71,34 @@ export default function ReferencesPanel({ isEditor }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Full screen, the way the gallery does it: Esc closes, arrows step through.
-  useEffect(() => {
-    if (lightboxIndex === null) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') setLightboxIndex(null);
-      if (e.key === 'ArrowRight') setLightboxIndex(i => (i === null ? i : Math.min(i + 1, refs.length - 1)));
-      if (e.key === 'ArrowLeft') setLightboxIndex(i => (i === null ? i : Math.max(i - 1, 0)));
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [lightboxIndex, refs.length]);
+  const handleDownload = async (url, filename) => {
+    if (downloadingUrl) return;
+    setDownloadingUrl(url);
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href; a.download = filename; a.click();
+      URL.revokeObjectURL(href);
+    } catch (_) {
+      // nothing to recover: the viewer keeps the download button available
+    } finally {
+      setDownloadingUrl(null);
+    }
+  };
+
+  const openLightboxAt = (creative) => setLightbox({
+    items: refs.map(r => ({ url: r.image_url, name: r.name, creative: r })),
+    index: refs.indexOf(creative),
+  });
 
   const removeReference = async (id) => {
     setBusyId(id);
     try {
       await creativesApi.updateFeedback(id, { is_reference: false });
       setRefs(prev => prev.filter(r => r.id !== id));
-      setLightboxIndex(null);
+      setLightbox(null);
     } catch (_) {
       // leave the card in place; the list reloads on the next visit
     } finally {
@@ -143,7 +147,7 @@ export default function ReferencesPanel({ isEditor }) {
                 // over a taller box
                 className="group relative aspect-4/5 rounded-xl overflow-hidden border border-white/6 bg-black"
               >
-                <button onClick={() => setLightboxIndex(refs.indexOf(c))}
+                <button onClick={() => openLightboxAt(c)}
                   className="absolute inset-0 w-full h-full cursor-zoom-in" title="View fullscreen">
                   <CreativeImg creativeId={c.id} alt={c.name} loading="lazy" decoding="async"
                     className="absolute inset-0 w-full h-full object-cover opacity-85 group-hover:opacity-100 transition-opacity" />
@@ -184,103 +188,16 @@ export default function ReferencesPanel({ isEditor }) {
         </div>
       )}
 
-      {createPortal(
-        <AnimatePresence>
-          {lightboxIndex !== null && refs[lightboxIndex] && (() => {
-            const current = refs[lightboxIndex];
-            return (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setLightboxIndex(null)}
-              className="fixed inset-0 z-[100] bg-black/92 backdrop-blur-sm flex"
-            >
-              <button onClick={() => setLightboxIndex(null)} title="Close"
-                className="absolute top-5 right-[22rem] z-10 p-2 rounded-xl bg-white/10 border border-white/15 text-white hover:bg-white/20 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-
-              {lightboxIndex > 0 && (
-                <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i - 1); }} title="Previous"
-                  className="absolute left-5 top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-white/10 border border-white/15 text-white hover:bg-white/20 transition-colors">
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-              )}
-              {lightboxIndex < refs.length - 1 && (
-                <button onClick={(e) => { e.stopPropagation(); setLightboxIndex(i => i + 1); }} title="Next"
-                  className="absolute left-auto right-[22rem] top-1/2 -translate-y-1/2 z-10 p-2.5 rounded-full bg-white/10 border border-white/15 text-white hover:bg-white/20 transition-colors">
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              )}
-
-              {/* Left — the image. The column itself stays click-through so the
-                  space around the image closes the viewer, the way the gallery
-                  behaves; only the image swallows the click. */}
-              <div className="flex-1 flex items-center justify-center min-w-0 h-full relative">
-                <CreativeImg creativeId={current.id} alt={current.name}
-                  onClick={(e) => e.stopPropagation()}
-                  className="max-h-[86vh] max-w-full object-contain rounded-xl" />
-              </div>
-
-              {/* Right — info bar, same shape as the gallery's */}
-              <div onClick={(e) => e.stopPropagation()}
-                className="w-80 shrink-0 h-full overflow-y-auto border-l border-white/10 bg-[#0b0e17]/95 p-5 space-y-5">
-                <div>
-                  <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest mb-1">Reference</p>
-                  <h3 className="text-sm font-black text-white break-words">{current.name}</h3>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    {lightboxIndex + 1} of {refs.length}
-                  </p>
-                </div>
-
-                <div className="space-y-2.5">
-                  <Row label="Source" value={current.source === 'uploaded' ? 'Uploaded' : 'From gallery'} />
-                  {current.campaign_name && <Row label="Campaign" value={current.campaign_name} />}
-                  {current.aspect_ratio && <Row label="Format" value={current.aspect_ratio} />}
-                  {current.media_type && <Row label="Type" value={current.media_type} />}
-                  {(current.uploaded_by_name || current.created_by_name) && (
-                    <Row label="Added by" value={current.uploaded_by_name || current.created_by_name} />
-                  )}
-                  {current.created_at && (
-                    <Row label="Added" value={new Date(current.created_at).toLocaleDateString()} />
-                  )}
-                </div>
-
-                {current.tags?.length > 0 && (
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Tags</p>
-                    <div className="flex flex-wrap gap-1">
-                      {current.tags.map(t => (
-                        <span key={t.id ?? t.name} className="text-[9px] px-1.5 py-0.5 rounded border"
-                          style={{ color: t.color, borderColor: `${t.color}40`, background: `${t.color}15` }}>
-                          {t.name}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* What the model was told this image shows — the reason a
-                    reference is useful, and otherwise invisible anywhere. */}
-                {current.caption && (
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">Caption</p>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">{current.caption}</p>
-                  </div>
-                )}
-
-                {isEditor && (
-                  <button onClick={() => removeReference(current.id)} disabled={busyId === current.id}
-                    className="w-full py-2 rounded-xl bg-white/5 hover:bg-red-500/15 border border-white/10 hover:border-red-500/30 text-[11px] font-bold text-slate-400 hover:text-red-400 transition-all disabled:opacity-50">
-                    Remove from references
-                  </button>
-                )}
-              </div>
-            </motion.div>
-            );
-          })()}
-        </AnimatePresence>,
-        getPortalRoot()
-      )}
+      <CreativeLightbox
+        lightbox={lightbox}
+        setLightbox={setLightbox}
+        mediaDims={mediaDims}
+        setMediaDims={setMediaDims}
+        promptExpanded={promptExpanded}
+        setPromptExpanded={setPromptExpanded}
+        handleDownload={handleDownload}
+        downloadingUrl={downloadingUrl}
+      />
     </div>
   );
 }
