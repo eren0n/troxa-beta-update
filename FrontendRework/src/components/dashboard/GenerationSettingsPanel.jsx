@@ -27,6 +27,17 @@ import { MODELS, RATIO_OPTIONS, BRIEF_TYPE_META } from '../../lib/generationOpti
  * the pipeline list).
  */
 export default function GenerationSettingsPanel({ settings: s, footer }) {
+  // A campaign brief and a daily trend idea are mutually exclusive in effect:
+  // a trend idea is turned into a prebuilt master prompt, and the backend then
+  // skips the DNA build entirely — which is where a brief's text would have
+  // been used. Picking both silently threw one away, so each hides the other's
+  // options while it is selected. The trend idea only counts in auto mode,
+  // because that is the only mode that acts on it; without that check a
+  // leftover selection would keep the briefs hidden in custom mode with no
+  // visible trend card left to deselect.
+  const trendIdeaActive = s.mode === 'auto' && !!s.activeTrendIdeaId;
+  const briefSelected = !!s.selectedBriefId;
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 items-start">
       {/* ── Reference Photo Grid — below lg this renders after the settings
@@ -265,7 +276,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
                 </div>
               )}
 
-              {!s.intelLoading && s.intelBriefs.length > 0 && (
+              {!s.intelLoading && s.intelBriefs.length > 0 && !trendIdeaActive && (
                 <div className="space-y-2 pt-1">
                   {s.intelBriefs.map((brief) => {
                     const meta = BRIEF_TYPE_META[brief.type] || BRIEF_TYPE_META['on-brand'];
@@ -298,6 +309,12 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
                   <p className="text-[10px] text-slate-700 text-center pt-1">Select a brief → Extra Instructions auto-fills</p>
                 </div>
               )}
+
+              {!s.intelLoading && s.intelBriefs.length > 0 && trendIdeaActive && (
+                <p className="text-[10px] text-slate-600 leading-relaxed pt-1">
+                  Briefs are hidden while a daily trend idea is selected — deselect it to generate from a brief instead.
+                </p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -321,8 +338,9 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
           </div>
         )}
 
-        {/* Auto mode: Trend Scout */}
-        {s.mode === 'auto' && (
+        {/* Auto mode: Trend Scout — the whole block is a picker, so a selected
+            campaign brief hides all of it rather than just the cards. */}
+        {s.mode === 'auto' && !briefSelected && (
           <div style={GLASS_STYLE} className="rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
