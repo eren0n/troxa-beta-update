@@ -575,7 +575,8 @@ class SlackInteractionView(APIView):
         count and submit again without retyping the prompt.
         """
         from apps.creatives.generation import (
-            AUTO_MODE_MODEL, DEFAULT_BLEND_WEIGHT, FINGERPRINT_ALWAYS_ON, start_generation,
+            AUTO_MODE_MODEL, DEFAULT_BLEND_WEIGHT, FINGERPRINT_ALWAYS_ON,
+            default_logo_id, start_generation,
         )
         from .services import post_generation_queued
 
@@ -625,6 +626,10 @@ class SlackInteractionView(APIView):
                 'generation_mode': 'auto',
                 'use_fingerprint': FINGERPRINT_ALWAYS_ON,
                 'blend_weight': DEFAULT_BLEND_WEIGHT,
+                # Auto mode stamps the workspace's primary logo once the images
+                # come back; without this a Slack request produced bare
+                # creatives while the same request from the dashboard didn't.
+                'logo_id': default_logo_id(ws),
                 'actor': actor,
             },
             user=None, origin='slack', origin_channel=sc.channel_id,

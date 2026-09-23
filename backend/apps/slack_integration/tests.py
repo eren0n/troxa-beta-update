@@ -235,6 +235,10 @@ class SlackGenerateTests(TestCase):
             content_types=[], auto_post_types=[],
         )
         self.campaign = Campaign.objects.create(workspace=self.ws, name='Summer Push')
+        from apps.brand_kit.models import Logo
+        Logo.objects.create(workspace=self.ws, name='Secondary', file='logos/b.png')
+        self.primary_logo = Logo.objects.create(
+            workspace=self.ws, name='Primary', file='logos/a.png', is_primary=True)
 
     # ── /troxa generate ────────────────────────────────────────────────────
     def command(self, text='generate', channel='C1', team='T1'):
@@ -318,6 +322,8 @@ class SlackGenerateTests(TestCase):
         # rather than on-brand, which is the whole point of the workspace's DNA.
         self.assertTrue(job.use_fingerprint)
         self.assertEqual(job.blend_weight, 50)
+        # auto mode stamps the workspace's primary logo, same as the dashboard
+        self.assertEqual(job.logo, self.primary_logo)
         run.assert_called_once_with(job.id)
 
     def test_insufficient_credits_keeps_the_modal_open(self):
@@ -550,3 +556,29 @@ class SlackGenerateBriefTests(TestCase):
         job = GenerationJob.objects.get()
         self.assertEqual(job.extra_prompt, 'A muscular Zeus hurling lightning at the logo')
         self.assertTrue(job.use_fingerprint)
+
+
+class DefaultLogoTests(TestCase):
+    """What auto mode reaches for when nobody picked a logo."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='l', email='l@m.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.user)
+
+    def test_prefers_the_primary_logo(self):
+        from apps.brand_kit.models import Logo
+        from apps.creatives.generation import default_logo_id
+        Logo.objects.create(workspace=self.ws, name='First', file='logos/a.png')
+        primary = Logo.objects.create(workspace=self.ws, name='Primary',
+                                      file='logos/b.png', is_primary=True)
+        self.assertEqual(default_logo_id(self.ws), primary.id)
+
+    def test_falls_back_to_any_logo(self):
+        from apps.brand_kit.models import Logo
+        from apps.creatives.generation import default_logo_id
+        only = Logo.objects.create(workspace=self.ws, name='Only', file='logos/a.png')
+        self.assertEqual(default_logo_id(self.ws), only.id)
+
+    def test_none_when_the_brand_kit_has_no_logo(self):
+        from apps.creatives.generation import default_logo_id
+        self.assertIsNone(default_logo_id(self.ws))

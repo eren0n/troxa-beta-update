@@ -34,6 +34,17 @@ FINGERPRINT_ALWAYS_ON = True
 DEFAULT_BLEND_WEIGHT = 50
 
 
+def default_logo_id(ws):
+    """
+    The logo auto mode reaches for when nobody picked one: the workspace's
+    primary, else whichever exists. Mirrors how the Generate tab fills
+    defaultLogoId (useGenerationSettings.js), so a surface that doesn't ask
+    about logos still stamps the same one the dashboard would have.
+    """
+    logo = ws.logos.filter(is_primary=True).first() or ws.logos.first()
+    return logo.id if logo else None
+
+
 def credit_cost(num_images, model_name=DEFAULT_MODEL):
     return num_images * MODEL_CREDIT_COST.get(model_name, 1)
 
