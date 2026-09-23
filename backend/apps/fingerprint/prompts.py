@@ -483,6 +483,12 @@ QUALITY REQUIREMENTS:
    - No brand names, real logos, real people
    - No strategy language — describe what is IN the image
    - No description of what the brand normally does — describe THIS image
+   - No legal or disclaimer text of any kind — no "18+", "21+", "No Purchase
+     Necessary", "Void Where Prohibited", "Terms and Conditions Apply", and no
+     instruction to place fine print anywhere in the frame. The generation
+     pipeline adds the workspace's own disclaimer at the bottom of every
+     creative, so anything written here is rendered a second time and the image
+     comes back with two.
 
 → Honor negative patterns: do not include any element from negative_patterns in any brief.
 
