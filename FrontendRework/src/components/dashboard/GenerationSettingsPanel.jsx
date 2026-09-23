@@ -349,6 +349,9 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
                 {s.trendBrief?.status === 'ready' && s.trendBrief.ideas?.length > 0 && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/15 text-orange-400 font-black">{s.trendBrief.ideas.length} ideas</span>
                 )}
+                {s.trendBrief?.stale && s.trendBrief?.status === 'ready' && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/8 text-slate-500 font-black">A day old</span>
+                )}
               </div>
               <button onClick={s.handleRefreshTrends} disabled={s.trendLoading || s.trendBrief?.status === 'pending'}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
@@ -384,6 +387,12 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
 
             {s.trendBrief?.status === 'failed' && !s.trendLoading && (
               <p className="text-xs text-red-400">Trend research failed. Click Refresh to retry.</p>
+            )}
+
+            {!s.trendLoading && !s.trendBrief?.status && (
+              <p className="text-[10px] text-slate-600 leading-relaxed">
+                No ideas scouted yet — hit Refresh to pull today's trends.
+              </p>
             )}
           </div>
         )}

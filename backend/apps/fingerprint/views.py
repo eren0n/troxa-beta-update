@@ -221,21 +221,28 @@ def _get_staleness_hours(brief):
 
 class WorkspaceTrendView(APIView):
     """
-    GET  /api/fingerprint/trends/  — return latest trend brief for this workspace.
-        Automatically triggers a new scout run if no brief exists or the latest
-        is older than 24 hours and not currently pending.
-    POST /api/fingerprint/trends/  — force a fresh scout run immediately.
+    GET  /api/fingerprint/trends/  — return the latest trend brief. Read-only.
+    POST /api/fingerprint/trends/  — run the scout. The only thing that does.
+
+    The GET used to start a scout run itself whenever no brief existed or the
+    latest was over a day old. Every visit to the Generate tab and to the
+    Automation pipeline builder calls it, so simply opening the page spent a
+    web-search LLM call — nobody had asked for fresh ideas, and the bill grew
+    with traffic rather than with use. Refreshing is now something a person
+    does on purpose, with the Refresh button; `stale` still goes out so the UI
+    can say the ideas are a day old.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         ws = get_workspace(request)
         latest = WorkspaceTrendBrief.objects.filter(workspace=ws).first()
-
-        stale = _get_staleness_hours(latest) > 24
-        if not latest or (stale and latest.status != 'pending'):
-            # Auto-trigger a fresh run
-            latest = trigger_trend_scout(ws)
+        if not latest:
+            # Nothing scouted yet — the panel offers a Refresh button for that.
+            return Response({
+                'id': None, 'status': None, 'landscape_summary': '', 'ideas': [],
+                'error': '', 'created_at': None, 'stale': False,
+            })
 
         return Response({
             'id':                 latest.id,
