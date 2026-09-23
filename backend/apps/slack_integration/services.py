@@ -87,9 +87,10 @@ def _creative_url(creative):
 
 
 def _rating_status_text(creative, actor=None):
+    from apps.creatives.rating import format_rating
     parts = []
     if creative.rating:
-        parts.append(f':star: *{creative.rating}/10*')
+        parts.append(f':star: *{format_rating(creative.rating)}*')
     from apps.creatives.rating import is_winner
     if is_winner(creative):
         parts.append(':trophy: *Winner*')
@@ -113,17 +114,18 @@ def creative_action_blocks(creative, actor=None):
     if creative is None:
         return []
 
-    from apps.creatives.rating import RATING_MAX, RATING_MIN
+    from apps.creatives.rating import DISPLAY_MAX, DISPLAY_STEP, RATING_MAX, RATING_MIN, format_rating
 
     cid = str(creative.id)
+    # Labelled in half stars, valued on the stored 1-10 scale.
     options = [
-        {'text': {'type': 'plain_text', 'text': f'{n}/10'}, 'value': f'{cid}:{n}'}
+        {'text': {'type': 'plain_text', 'text': format_rating(n)}, 'value': f'{cid}:{n}'}
         for n in range(RATING_MIN, RATING_MAX + 1)
     ]
     select = {
         'type': 'static_select',
         'action_id': RATE_ACTION_ID,
-        'placeholder': {'type': 'plain_text', 'text': 'Rate 1-10'},
+        'placeholder': {'type': 'plain_text', 'text': f'Rate {DISPLAY_STEP:g}-{DISPLAY_MAX}'},
         'options': options,
     }
     if creative.rating:

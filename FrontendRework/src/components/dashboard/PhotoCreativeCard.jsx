@@ -8,6 +8,7 @@ import TagBadge from './TagBadge';
 import TagPicker from './TagPicker';
 import WinnerBadge from './WinnerBadge';
 import InlineRename from './InlineRename';
+import { formatRating } from '../../lib/rating';
 
 export default function PhotoCreativeCard({
   creative, view, index, onOpenLightbox,
@@ -18,7 +19,7 @@ export default function PhotoCreativeCard({
   const navigate = useNavigate();
   const isHoveringRating = hoverStar[creative.id] !== undefined;
   const activeRating = hoverStar[creative.id] ?? creative.rating ?? 0;
-  const ratingLabel = isHoveringRating ? `${hoverStar[creative.id]}/10` : creative.rating > 0 ? `${creative.rating}/10` : '-/10';
+  const ratingLabel = formatRating(isHoveringRating ? hoverStar[creative.id] : creative.rating > 0 ? creative.rating : null);
 
   return (
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}

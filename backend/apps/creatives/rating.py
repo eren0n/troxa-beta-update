@@ -13,7 +13,21 @@ from apps.activity.utils import log_event
 
 logger = logging.getLogger(__name__)
 
+# Stored 1-10. Shown out of 5 in half steps, which is what the five stars in
+# the UI have always drawn — each star is worth two stored points. Only the
+# presentation changed; the stored scale is what the API, Agent 1 and every
+# existing row already speak. Mirrors FrontendRework/src/lib/rating.js.
 RATING_MIN, RATING_MAX = 1, 10
+DISPLAY_MAX = 5
+DISPLAY_STEP = 0.5
+
+
+def format_rating(stored):
+    """1-10 in, "4.5/5" out."""
+    if stored is None:
+        return f'-/{DISPLAY_MAX}'
+    value = stored / 2
+    return f'{value:g}/{DISPLAY_MAX}'
 
 # Mirrors WINNER_TAG_NAME / WINNER_TAG_COLOR in
 # FrontendRework/src/components/dashboard/WinnerBadge.jsx. The Winner badge is
@@ -64,7 +78,7 @@ def apply_rating(creative, value, *, user=None, source='dashboard', actor=None):
 
     log_event(
         creative.workspace, user, 'creative.rated',
-        (f'{creative.name} rated {new_rating}/10' if new_rating is not None
+        (f'{creative.name} rated {format_rating(new_rating)}' if new_rating is not None
          else f'{creative.name} rating cleared'),
         {
             'creative_id': str(creative.id),

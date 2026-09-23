@@ -8,6 +8,7 @@ import TagBadge from './TagBadge';
 import TagPicker from './TagPicker';
 import WinnerBadge from './WinnerBadge';
 import InlineRename from './InlineRename';
+import { formatRating } from '../../lib/rating';
 
 // Video creatives can't be opened in the photo editor or "Edit Logo" flow,
 // so this card intentionally has no edit actions — just preview, rate,
@@ -30,7 +31,7 @@ export default function VideoCreativeCard({
   const posterUrl = useCreativeImage(creative.id);
   const isHoveringRating = hoverStar[creative.id] !== undefined;
   const activeRating = hoverStar[creative.id] ?? creative.rating ?? 0;
-  const ratingLabel = isHoveringRating ? `${hoverStar[creative.id]}/10` : creative.rating > 0 ? `${creative.rating}/10` : '-/10';
+  const ratingLabel = formatRating(isHoveringRating ? hoverStar[creative.id] : creative.rating > 0 ? creative.rating : null);
 
   // Grid/list views can render dozens of these at once — with `autoPlay`
   // every one of them used to start downloading and decoding its full

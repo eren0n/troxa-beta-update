@@ -88,6 +88,10 @@ class SlackRatingTests(TestCase):
         self.assertEqual(blocks[0]['block_id'], f'rate:{self.creative.id}')
         self.assertEqual(len(select['options']), 10)
         self.assertEqual(select['options'][7]['value'], f'{self.creative.id}:8')
+        # labelled out of 5 in half steps, valued on the stored 1-10 scale
+        self.assertEqual([o['text']['text'] for o in select['options']],
+                         ['0.5/5', '1/5', '1.5/5', '2/5', '2.5/5',
+                          '3/5', '3.5/5', '4/5', '4.5/5', '5/5'])
         self.assertNotIn('initial_option', select)
         self.assertEqual(blocks[0]['elements'][1]['action_id'], WINNER_ACTION_ID)
         self.assertEqual(len(blocks), 1)  # no status line while unrated
@@ -97,7 +101,7 @@ class SlackRatingTests(TestCase):
         self.creative.save()
         blocks = creative_action_blocks(self.creative, actor='@eren')
         self.assertEqual(blocks[0]['elements'][0]['initial_option']['value'], f'{self.creative.id}:8')
-        self.assertIn('8/10', blocks[1]['elements'][0]['text'])
+        self.assertIn('4/5', blocks[1]['elements'][0]['text'])      # stored 8 shows as 4/5
         self.assertIn('@eren', blocks[1]['elements'][0]['text'])
 
     # ── shared rating path ─────────────────────────────────────────────────
@@ -139,7 +143,7 @@ class SlackRatingTests(TestCase):
         image = sent['blocks'][0]
         self.assertNotIn('image_bytes', image)
         self.assertNotIn('fallback', image)
-        self.assertIn('7/10', sent['blocks'][2]['elements'][0]['text'])
+        self.assertIn('3.5/5', sent['blocks'][2]['elements'][0]['text'])   # stored 7
 
     def test_winner_button_from_slack_applies(self):
         with mock.patch('apps.slack_integration.services.http_requests.post'):
@@ -204,7 +208,7 @@ class SlackRatingTests(TestCase):
         blocks = post.call_args.kwargs['json']['blocks']
         self.assertEqual(blocks[-1]['elements'], ['KEEP'])
         self.assertEqual(blocks[0]['block_id'], f'rate:{self.creative.id}')
-        self.assertIn('4/10', blocks[1]['elements'][0]['text'])
+        self.assertIn('2/5', blocks[1]['elements'][0]['text'])       # stored 4
         self.assertEqual(len(blocks), 3)   # no duplicate status line
 
 

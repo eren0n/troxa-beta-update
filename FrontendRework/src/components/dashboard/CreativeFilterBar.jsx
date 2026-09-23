@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Search, Filter, ChevronDown, X, ArrowUpDown, Check } from 'lucide-react';
 import { GLASS_STYLE } from '../ui/GlassCard';
 import TagBadge from './TagBadge';
+import { RATING_MAX, RATING_STEP } from '../../lib/rating';
 
 export const SOURCE_OPTIONS = [
   { id: '', label: 'All' },
@@ -367,12 +368,14 @@ export default function CreativeFilterBar({
                     </div>
 
                     <div className="space-y-2">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-(--text-muted)">Rating <span className="text-(--text-faint) normal-case">(1–10)</span></p>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-(--text-muted)">Rating <span className="text-(--text-faint) normal-case">({RATING_STEP}–{RATING_MAX})</span></p>
                       <div className="flex items-center gap-2">
-                        <input type="number" min={1} max={10} value={f.ratingMin} onChange={e => patch({ ratingMin: e.target.value })}
+                        {/* Typed in half stars; buildGalleryParams doubles them
+                            back to the 1-10 the API stores. */}
+                        <input type="number" min={RATING_STEP} max={RATING_MAX} step={RATING_STEP} value={f.ratingMin} onChange={e => patch({ ratingMin: e.target.value })}
                           placeholder="Min" className="w-full bg-(--bg-input) border border-(--border-subtle) text-(--text-primary) rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-(--accent) transition-all" />
                         <span className="text-(--text-muted) text-xs">–</span>
-                        <input type="number" min={1} max={10} value={f.ratingMax} onChange={e => patch({ ratingMax: e.target.value })}
+                        <input type="number" min={RATING_STEP} max={RATING_MAX} step={RATING_STEP} value={f.ratingMax} onChange={e => patch({ ratingMax: e.target.value })}
                           placeholder="Max" className="w-full bg-(--bg-input) border border-(--border-subtle) text-(--text-primary) rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-(--accent) transition-all" />
                       </div>
                     </div>
@@ -445,7 +448,7 @@ export default function CreativeFilterBar({
           })}
           {(f.ratingMin || f.ratingMax) && (
             <span onClick={() => patch({ ratingMin: '', ratingMax: '' })} className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/5 border border-blue-500/10 rounded-full text-[10px] font-bold text-blue-400 cursor-pointer">
-              Rating: {f.ratingMin || 1}-{f.ratingMax || 10} <X className="w-3 h-3" />
+              Rating: {f.ratingMin || RATING_STEP}-{f.ratingMax || RATING_MAX} <X className="w-3 h-3" />
             </span>
           )}
           {(f.dateFrom || f.dateTo) && (
