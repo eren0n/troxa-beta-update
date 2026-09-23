@@ -44,7 +44,7 @@ class GeneratedCreativeSerializer(serializers.ModelSerializer):
             'blend_weight', 'use_fingerprint', 'simplicity_weight', 'quality_score',
             'created_by_name', 'reference_thumbs', 'rating', 'feedback_text',
             # unified table fields
-            'source', 'is_edited', 'generated_by_id', 'generated_by_name', 'uploaded_by_name',
+            'source', 'is_edited', 'is_reference', 'generated_by_id', 'generated_by_name', 'uploaded_by_name',
             'tags', 'meta_linked', 'proxy_url', 'proxy_logo_url',
             # merged in from the old reference-photo (WinningStatic) table —
             # every creative is captioned so it can be used as a reference

@@ -169,6 +169,11 @@ class GalleryView(APIView):
             qs = qs.filter(media_type__iexact=p['media_type'])
         if p.get('is_edited') is not None and p['is_edited'] != '':
             qs = qs.filter(is_edited=p['is_edited'].lower() == 'true')
+        # Reference material vs generation output. Left unset the endpoint
+        # returns both, because the pickers that reach for a creative to edit
+        # or turn into a video don't care which it is.
+        if p.get('is_reference') is not None and p['is_reference'] != '':
+            qs = qs.filter(is_reference=p['is_reference'].lower() == 'true')
 
         # Additional filters
         if p.get('campaign_id'):
@@ -328,6 +333,9 @@ class UploadCreativeView(APIView):
             uploaded_by=request.user,
             created_by=request.user,
             in_gallery=True,
+            # An outside image is brought in to generate from, so it lands in
+            # Brand Kit's references rather than among the generated work.
+            is_reference=True,
         )
         creative.uploaded_file.save(file.name, file, save=False)
         creative.image_url = request.build_absolute_uri(creative.uploaded_file.url)
@@ -463,7 +471,7 @@ class CreativeDetailView(APIView):
         if not creative:
             return Response(status=404)
         for field in ('logo_position', 'media_type', 'name', 'status', 'feedback_text',
-                      'is_edited', 'aspect_ratio', 'campaign_id'):
+                      'is_edited', 'is_reference', 'aspect_ratio', 'campaign_id'):
             if field in request.data:
                 setattr(creative, field, request.data[field])
         creative.save()

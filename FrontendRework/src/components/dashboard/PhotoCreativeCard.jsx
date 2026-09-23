@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Download, Pencil, Maximize2, Star, StarHalf, Video, MessageSquare, X } from 'lucide-react';
+import { Download, Pencil, Maximize2, Star, StarHalf, Video, MessageSquare, X, ImagePlus } from 'lucide-react';
 import { GLASS_STYLE } from '../ui/GlassCard';
 import { downloadCreativeImage } from '../../lib/creativeUrl';
 import { CreativeImg } from '../ui/CreativeImg';
@@ -14,7 +14,7 @@ export default function PhotoCreativeCard({
   creative, view, index, onOpenLightbox,
   hoverStar, setHoverStar, onRate,
   onRename, allTags, onTagsChange, onTagCreated,
-  onComment, onDelete,
+  onComment, onDelete, onToggleReference,
 }) {
   const navigate = useNavigate();
   const isHoveringRating = hoverStar[creative.id] !== undefined;
@@ -162,6 +162,19 @@ export default function PhotoCreativeCard({
             className="flex-1 py-1.5 bg-white/5 hover:bg-violet-600 border border-white/10 hover:border-violet-500 rounded-lg text-[9px] font-bold uppercase tracking-widest text-gray-300 hover:text-white transition-all flex items-center justify-center gap-1.5">
             <Video className="w-3 h-3" /> Make Video
           </button>
+          {/* Promote to reference material — it stays in the gallery, it just
+              also becomes something the Generate tab can build from. */}
+          {onToggleReference && (
+            <button onClick={() => onToggleReference(creative)}
+              className={`p-1.5 rounded-lg border transition-all ${
+                creative.is_reference
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                  : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-300 hover:text-white'
+              }`}
+              title={creative.is_reference ? 'Remove from references' : 'Make reference'}>
+              <ImagePlus className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button onClick={() => downloadCreativeImage(creative.id, `${creative.name || creative.id}.jpg`)}
             className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition-all" title="Download">
             <Download className="w-3.5 h-3.5" />

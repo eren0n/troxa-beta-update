@@ -13,6 +13,7 @@ import { FONT_OPTIONS, PALETTE_ROLES, fontStack, ensureFontLoaded, getContrastTe
 import LockedFeature from '../../components/dashboard/LockedFeature';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { Skeleton } from '../../components/ui/Skeleton';
+import ReferencesPanel from '../../components/dashboard/ReferencesPanel';
 
 function SectionHeader({ icon: Icon, iconColor, title, desc, action }) {
   return (
@@ -1078,6 +1079,7 @@ function BrandKitPage() {
 
   const tabs = [
     { id: 'assets',      label: 'Assets'      },
+    { id: 'references',  label: 'References'  },
     { id: 'scenes',      label: 'Scenes'      },
     { id: 'identity',    label: 'Identity'    },
     { id: 'campaigns',   label: 'Campaigns'   },
@@ -1503,6 +1505,12 @@ function BrandKitPage() {
                 {isEditor && <AssetUploadTile onClick={() => promoInputRef.current?.click()} uploading={uploadingPromo} />}
               </HorizontalGallery>
             </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'references' && (
+          <motion.div key="references" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <ReferencesPanel isEditor={isEditor} />
           </motion.div>
         )}
 

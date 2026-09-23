@@ -16,7 +16,6 @@ import { useCreativeImage } from '../../lib/creativeUrl';
 import { CreativeImg } from '../../components/ui/CreativeImg';
 import { getPortalRoot } from '../../lib/portalRoot';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
-import UploadCreativeButton from '../../components/dashboard/UploadCreativeButton';
 import CreativeFilterBar, { EMPTY_CREATIVE_FILTERS } from '../../components/dashboard/CreativeFilterBar';
 import PhotoCreativeCard from '../../components/dashboard/PhotoCreativeCard';
 import VideoCreativeCard from '../../components/dashboard/VideoCreativeCard';
@@ -415,8 +414,12 @@ export default function GeneratedCreatives() {
   const [campaignsList, setCampaignsList] = useState([]);
   const [allTags, setAllTags] = useState([]);
   const [contributorsList, setContributorsList] = useState([]);
+  // The gallery shows what Troxa produced. Uploaded images are reference
+  // material and live under Brand Kit → References, so they are filtered out
+  // here rather than mixed in with the work.
   const [filters, setFilters] = useState({
     ...EMPTY_CREATIVE_FILTERS,
+    source: 'troxa_generated',
     ...(location.state?.mediaType ? { mediaType: location.state.mediaType } : {}),
     ...(location.state?.isEdited ? { isEdited: location.state.isEdited } : {}),
   });
@@ -510,8 +513,14 @@ export default function GeneratedCreatives() {
     setCreatives(prev => prev.map(c => c.id === creativeId ? { ...c, tags: updatedTags } : c));
   };
 
-  const handleCreativeUploaded = (created) => {
-    setCreatives(prev => [{ ...created, thumbnail: created.thumbnail || created.image_url }, ...prev]);
+  const toggleReference = async (creative) => {
+    const next = !creative.is_reference;
+    setCreatives(prev => prev.map(c => c.id === creative.id ? { ...c, is_reference: next } : c));
+    try {
+      await creativesApi.updateFeedback(creative.id, { is_reference: next });
+    } catch (_) {
+      setCreatives(prev => prev.map(c => c.id === creative.id ? { ...c, is_reference: !next } : c));
+    }
   };
 
   const handleDeleteCreative = async (id) => {
@@ -697,7 +706,8 @@ export default function GeneratedCreatives() {
               <List className="w-4 h-4" />
             </button>
           </div>
-          <UploadCreativeButton onUploaded={handleCreativeUploaded} />
+          {/* Uploading moved to Brand Kit → References: an uploaded image is
+              reference material, and it no longer appears in this gallery. */}
           <button onClick={() => navigate('/dashboard/create')}
             className="px-6 py-2.5 bg-(--accent) hover:bg-(--accent-hover) text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-accent-glow">
             <Sparkles className="w-4 h-4" /> Generate New
@@ -712,6 +722,7 @@ export default function GeneratedCreatives() {
         campaignsList={campaignsList}
         allTags={allTags}
         contributorsList={contributorsList}
+        showSource={false}
         searchPlaceholder="Search by name or Campaign..."
       />
 
@@ -741,6 +752,7 @@ export default function GeneratedCreatives() {
                 onOpenLightbox={() => openLightboxFor(creative)}
                 hoverStar={hoverStar}
                 setHoverStar={setHoverStar}
+                onToggleReference={toggleReference}
                 onRate={handleRateCreative}
                 onRename={handleRenameCreative}
                 allTags={allTags}

@@ -9,6 +9,7 @@ export function buildGalleryParams(filters, allTags) {
     source: filters.source || undefined,
     media_type: filters.mediaType || undefined,
     is_edited: filters.isEdited || undefined,
+    is_reference: filters.isReference || undefined,
     campaign_id: filters.campaignId || undefined,
     aspect_ratio: filters.aspectRatio || undefined,
     generated_by: (filters.generatedBy || []).length ? filters.generatedBy.join(',') : undefined,

@@ -19,12 +19,6 @@ export const MEDIA_TYPE_OPTIONS = [
   { id: 'Video', label: 'Video' },
 ];
 
-export const EDIT_STATUS_OPTIONS = [
-  { id: '', label: 'All' },
-  { id: 'true', label: 'Edited' },
-  { id: 'false', label: 'Unedited' },
-];
-
 export const SORT_OPTIONS = [
   { id: '-created_at', label: 'Newest' },
   { id: 'created_at', label: 'Oldest' },
@@ -35,7 +29,7 @@ export const SORT_OPTIONS = [
 const ASPECT_RATIO_OPTIONS = ['1:1', '4:5', '9:16', '16:9'];
 
 export const EMPTY_CREATIVE_FILTERS = {
-  search: '', source: '', mediaType: '', isEdited: '', campaignId: '',
+  search: '', source: '', mediaType: '', isEdited: '', isReference: '', campaignId: '',
   tags: [], ratingMin: '', ratingMax: '', dateFrom: '', dateTo: '', aspectRatio: '', generatedBy: [],
   sort: '-created_at',
 };
@@ -241,6 +235,9 @@ export default function CreativeFilterBar({
   allTags = [],
   contributorsList = [],
   showSearch = true,
+  // The gallery lists generated work only, so "which source" has nothing left
+  // to choose between there; the pickers still show both and keep it.
+  showSource = true,
   showMediaType = true,
   searchPlaceholder = 'Search by name or campaign...',
 }) {
@@ -266,7 +263,7 @@ export default function CreativeFilterBar({
 
   const moreFilterCount = ['campaignId', 'aspectRatio', 'ratingMin', 'ratingMax', 'dateFrom', 'dateTo']
     .filter(k => f[k]).length + f.tags.length + f.generatedBy.length;
-  const activeFilterCount = moreFilterCount + (f.source ? 1 : 0) + (showMediaType && f.mediaType ? 1 : 0) + (f.isEdited ? 1 : 0);
+  const activeFilterCount = moreFilterCount + (showSource && f.source ? 1 : 0) + (showMediaType && f.mediaType ? 1 : 0);
 
   const clearAll = () => onChange({ ...EMPTY_CREATIVE_FILTERS, search: showSearch ? f.search : '', sort: f.sort, mediaType: showMediaType ? '' : f.mediaType });
 
@@ -294,11 +291,12 @@ export default function CreativeFilterBar({
         )}
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <Segmented label="Source" options={SOURCE_OPTIONS} value={f.source} onChange={(v) => patch({ source: v })} />
+          {showSource && (
+            <Segmented label="Source" options={SOURCE_OPTIONS} value={f.source} onChange={(v) => patch({ source: v })} />
+          )}
           {showMediaType && (
             <Segmented label="Type" options={MEDIA_TYPE_OPTIONS} value={f.mediaType} onChange={(v) => patch({ mediaType: v })} />
           )}
-          <Segmented label="Edit" options={EDIT_STATUS_OPTIONS} value={f.isEdited} onChange={(v) => patch({ isEdited: v })} />
 
           <PanelSelect
             value={f.sort}
@@ -420,11 +418,6 @@ export default function CreativeFilterBar({
           {showMediaType && f.mediaType && (
             <span onClick={() => patch({ mediaType: '' })} className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-full text-[10px] font-bold text-blue-400 cursor-pointer">
               {MEDIA_TYPE_OPTIONS.find(o => o.id === f.mediaType)?.label} <X className="w-3 h-3" />
-            </span>
-          )}
-          {f.isEdited && (
-            <span onClick={() => patch({ isEdited: '' })} className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-full text-[10px] font-bold text-blue-400 cursor-pointer">
-              {EDIT_STATUS_OPTIONS.find(o => o.id === f.isEdited)?.label} <X className="w-3 h-3" />
             </span>
           )}
           {campaignName && (

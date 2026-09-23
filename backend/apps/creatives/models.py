@@ -133,6 +133,11 @@ class GeneratedCreative(models.Model):
     # Unified creative table fields
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='troxa_generated', db_index=True)
     is_edited = models.BooleanField(default=False, db_index=True)
+    # Material for the next generation rather than output of the last one.
+    # Uploads are references by definition; a generated creative becomes one
+    # when somebody promotes it from the gallery, and stays in the gallery too
+    # — being useful as a reference doesn't stop it being a creative.
+    is_reference = models.BooleanField(default=False, db_index=True)
     # The workspace member responsible for generating/uploading/editing this
     # creative — a real reference (not a name snapshot) so filtering by
     # person survives renames and still works for members who've since left

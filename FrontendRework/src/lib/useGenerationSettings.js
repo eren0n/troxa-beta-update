@@ -92,7 +92,11 @@ export function useGenerationSettings(initial = {}) {
   const [uploadingStatic, setUploadingStatic] = useState(false);
   const [uploadNotice, setUploadNotice] = useState(null);
   const staticInputRef = useRef(null);
-  const [referenceFilters, setReferenceFilters] = useState({ ...EMPTY_CREATIVE_FILTERS, mediaType: 'Photo' });
+  // Reference material only — Brand Kit → References is what this grid is a
+  // view of, not the whole gallery.
+  const [referenceFilters, setReferenceFilters] = useState({
+    ...EMPTY_CREATIVE_FILTERS, mediaType: 'Photo', isReference: 'true',
+  });
   const {
     creatives: referenceCreatives, setCreatives: setReferenceCreatives,
     loading: loadingReferences, hasMore: hasMoreReferences, sentinelRef: referencesSentinelRef,
