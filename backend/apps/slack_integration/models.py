@@ -44,3 +44,33 @@ class SlackChannel(models.Model):
 
     def __str__(self):
         return f'#{self.channel_name} → {self.workspace.name}'
+
+
+class SlackPostedMessage(models.Model):
+    """
+    A message we posted that carries rating rows, remembered so it can be
+    edited later.
+
+    Slack lets a bot rewrite its own messages with chat.update, but only if it
+    knows the message id, and only by sending the whole message back. Reading
+    one back out of Slack would need a history scope and a reinstall in every
+    workspace, so what we sent is kept here instead — the blocks are rewritten
+    in place and posted again whenever a rating or the Winner badge changes,
+    from the dashboard or from Slack.
+    """
+    channel     = models.ForeignKey(SlackChannel, on_delete=models.CASCADE,
+                                    related_name='posted_messages')
+    message_ts  = models.CharField(max_length=32)
+    text        = models.CharField(max_length=500, blank=True, default='')
+    blocks      = models.JSONField(default=list)
+    # Which creatives have a rating row in this message.
+    creatives   = models.ManyToManyField('creatives.GeneratedCreative',
+                                         related_name='slack_posts')
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('channel', 'message_ts')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.channel.channel_name}@{self.message_ts}'

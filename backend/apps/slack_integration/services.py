@@ -3,10 +3,14 @@ Slack notification helpers. Called from creatives/services.py after generation.
 All calls are fire-and-forget — exceptions are swallowed so a Slack failure
 never breaks a generation job.
 """
+import logging
+
 import requests as http_requests
 from django.conf import settings
 
 from .models import SlackChannel
+
+logger = logging.getLogger(__name__)
 
 SLACK_API = 'https://slack.com/api'
 
@@ -170,18 +174,19 @@ def _creative_blocks(creative, title, alt=None):
     return blocks
 
 
-def refresh_rating_row(response_url, message, creative, actor=None):
+def rewrite_rating_row(blocks, creative, actor=None):
     """
-    Rewrite one creative's rating row in the message it was clicked in.
+    Return `blocks` with this creative's rating row rebuilt, or None when the
+    message carries no such row.
 
-    Slack only offers whole-message replacement, so the original blocks arrive
-    in the interaction payload and we splice in just the row that changed —
-    the other three variants of a 4-image post are left exactly as they were.
+    Slack only replaces whole messages, so the row is spliced into the blocks
+    we already have — the other three variants of a 4-image post are left
+    exactly as they were.
     """
     cid = str(creative.id)
     fresh = creative_action_blocks(creative, actor=actor)
     out, replaced = [], False
-    for block in ((message or {}).get('blocks') or []):
+    for block in (blocks or []):
         bid = block.get('block_id') or ''
         if bid == f'{RATE_BLOCK_PREFIX}{cid}':
             out.extend(fresh)
@@ -192,7 +197,19 @@ def refresh_rating_row(response_url, message, creative, actor=None):
         if block.get('type') == 'image':
             block = {k: v for k, v in block.items() if k not in _ECHOED_IMAGE_FIELDS}
         out.append(block)
-    if not replaced:
+    return out if replaced else None
+
+
+def refresh_rating_row(response_url, message, creative, actor=None):
+    """
+    Rewrite the clicked message over the interaction's response_url.
+
+    Only needed for messages posted before we started recording them; anything
+    posted since goes through sync_creative_rating, which also reaches the
+    copies in other channels.
+    """
+    blocks = rewrite_rating_row((message or {}).get('blocks'), creative, actor=actor)
+    if blocks is None:
         return
     try:
         http_requests.post(
@@ -200,12 +217,73 @@ def refresh_rating_row(response_url, message, creative, actor=None):
             json={
                 'replace_original': True,
                 'text': (message or {}).get('text') or 'Creative updated',
-                'blocks': out,
+                'blocks': blocks,
             },
             timeout=10,
         )
     except Exception:
         pass
+
+
+def post_message(sc, token, payload, creatives=()):
+    """
+    chat.postMessage, remembering the result.
+
+    Slack hands back the message id; keeping it together with the blocks we
+    sent is what later lets a rating change rewrite the message in place.
+    Failing to record must never break the post itself.
+    """
+    result = _post(token, 'chat.postMessage', payload)
+    ts = result.get('ts') if isinstance(result, dict) else None
+    rateable = [c for c in creatives if c is not None]
+    if ts and rateable:
+        try:
+            from .models import SlackPostedMessage
+            msg, _ = SlackPostedMessage.objects.update_or_create(
+                channel=sc, message_ts=ts,
+                defaults={'text': (payload.get('text') or '')[:500],
+                          'blocks': payload.get('blocks') or []},
+            )
+            msg.creatives.set(rateable)
+        except Exception:
+            logger.exception('slack.post_record_failed channel=%s ts=%s', sc.channel_id, ts)
+    return result
+
+
+def sync_creative_rating(creative_id, actor=None):
+    """
+    Push a creative's current rating and Winner badge into every Slack message
+    it was posted to.
+
+    Runs whenever a rating changes, wherever it changed — the gallery's stars,
+    the Slack dropdown, the API — because they all go through
+    apps.creatives.rating. A creative posted to three channels updates in all
+    three.
+    """
+    from apps.creatives.models import GeneratedCreative
+    from .models import SlackPostedMessage
+
+    creative = GeneratedCreative.objects.filter(pk=creative_id).first()
+    if not creative:
+        return
+    for post in (SlackPostedMessage.objects
+                 .filter(creatives=creative)
+                 .select_related('channel__installation')):
+        blocks = rewrite_rating_row(post.blocks, creative, actor=actor)
+        if blocks is None:
+            continue
+        result = _post(post.channel.installation.bot_token, 'chat.update', {
+            'channel': post.channel.channel_id,
+            'ts': post.message_ts,
+            'text': post.text or 'Creative updated',
+            'blocks': blocks,
+        })
+        if result.get('ok'):
+            post.blocks = blocks
+            post.save(update_fields=['blocks'])
+        else:
+            logger.warning('slack.chat_update_failed ts=%s error=%s',
+                           post.message_ts, result.get('error'))
 
 
 def notify_slack_generation(workspace, job, creatives):
@@ -243,11 +321,11 @@ def notify_slack_generation(workspace, job, creatives):
     }]})
 
     for sc, token in channels:
-        _post(token, 'chat.postMessage', {
+        post_message(sc, token, {
             'channel': sc.channel_id,
             'text': f'{count} creative{"s" if count > 1 else ""} generated — {campaign}',
             'blocks': blocks,
-        })
+        }, creatives[:4])
 
     _mark_posted([str(c.id) for c in creatives])
 
@@ -282,11 +360,11 @@ def notify_slack_video(workspace, vjob):
     }]})
 
     for sc, token in channels:
-        _post(token, 'chat.postMessage', {
+        post_message(sc, token, {
             'channel': sc.channel_id,
             'text': f':clapper: Video ready — {creative_name}',
             'blocks': blocks,
-        })
+        }, [vjob.source_creative] if vjob.source_creative_id else [])
 
     if vjob.source_creative_id:
         _mark_posted([str(vjob.source_creative_id)])
@@ -317,11 +395,11 @@ def notify_slack_logo_save(workspace, creatives, user=None):
     }]})
 
     for sc, token in channels:
-        _post(token, 'chat.postMessage', {
+        post_message(sc, token, {
             'channel': sc.channel_id,
             'text': f':art: Logo applied — {count} image{"s" if count != 1 else ""} saved',
             'blocks': blocks,
-        })
+        }, creatives[:4])
 
     _mark_posted([str(c.id) for c in creatives])
 
@@ -369,11 +447,11 @@ def notify_slack_automation_done(workspace, automation, creatives):
     }]})
 
     for sc, token in channels:
-        _post(token, 'chat.postMessage', {
+        post_message(sc, token, {
             'channel': sc.channel_id,
             'text': f':white_check_mark: Automation "{automation.name}" complete — {count} images',
             'blocks': blocks,
-        })
+        }, creatives[:4])
 
     _mark_posted([str(c.id) for c in creatives])
 
@@ -428,11 +506,11 @@ def notify_slack_edit(workspace, creative, user=None):
     }]})
 
     for sc, token in channels:
-        _post(token, 'chat.postMessage', {
+        post_message(sc, token, {
             'channel': sc.channel_id,
             'text': f':pencil2: Edit saved — {creative.name}',
             'blocks': blocks,
-        })
+        }, [creative])
 
     _mark_posted([str(creative.id)])
 
@@ -635,11 +713,11 @@ def post_generation_result(job, creatives):
         'url': f'{base_url}/dashboard', 'style': 'primary',
     }]})
 
-    _post(sc.installation.bot_token, 'chat.postMessage', {
+    post_message(sc, sc.installation.bot_token, {
         'channel': sc.channel_id,
         'text': f'{count} creative{"s" if count > 1 else ""} ready — {campaign}',
         'blocks': blocks,
-    })
+    }, creatives[:4])
     _mark_posted([str(c.id) for c in creatives])
 
 
@@ -683,10 +761,10 @@ def post_creatives_to_channel(sc, token, creatives):
             'type': 'button', 'text': {'type': 'plain_text', 'text': 'Open Dashboard'},
             'url': f'{base_url}/dashboard', 'style': 'primary',
         }]})
-        _post(token, 'chat.postMessage', {
+        post_message(sc, token, {
             'channel': sc.channel_id,
             'text': creative.name,
             'blocks': blocks,
-        })
+        }, [creative])
 
     _mark_posted([str(c.id) for c in creatives])

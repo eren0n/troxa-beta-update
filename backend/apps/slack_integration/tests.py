@@ -322,7 +322,7 @@ class SlackGenerateTests(TestCase):
         # rather than on-brand, which is the whole point of the workspace's DNA.
         self.assertTrue(job.use_fingerprint)
         self.assertEqual(job.blend_weight, 50)
-        # auto mode stamps the workspace's primary logo, same as the dashboard
+        # the dialog sends no logo; the designated one is resolved server-side
         self.assertEqual(job.logo, self.primary_logo)
         run.assert_called_once_with(job.id)
 
@@ -558,27 +558,174 @@ class SlackGenerateBriefTests(TestCase):
         self.assertTrue(job.use_fingerprint)
 
 
-class DefaultLogoTests(TestCase):
-    """What auto mode reaches for when nobody picked a logo."""
+class DesignatedLogoTests(TestCase):
+    """
+    What a surface that never asks about logos stamps: the designated one, or
+    nothing. No arbitrary fallback — an unmarked brand kit means no logo.
+    """
 
     def setUp(self):
+        from apps.billing.models import Plan, Subscription
+        from apps.brand_kit.models import Campaign
         self.user = User.objects.create_user(username='l', email='l@m.com', password='x')
         self.ws = Workspace.objects.create(name='WS', owner=self.user)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.user, role='owner')
+        Subscription.objects.create(
+            workspace=self.ws, plan=Plan.objects.create(name='T', tier='team', monthly_credits=100))
+        self.campaign = Campaign.objects.create(workspace=self.ws, name='C')
 
-    def test_prefers_the_primary_logo(self):
+    def start(self, **kwargs):
+        from apps.creatives.generation import start_generation
+        with mock.patch('apps.creatives.services.generate_job_async'):
+            job, err = start_generation(
+                self.ws, {'campaign_id': str(self.campaign.id), 'num_images': 1}, **kwargs)
+        self.assertIsNone(err)
+        return job
+
+    def test_stamps_the_designated_logo(self):
         from apps.brand_kit.models import Logo
-        from apps.creatives.generation import default_logo_id
-        Logo.objects.create(workspace=self.ws, name='First', file='logos/a.png')
+        Logo.objects.create(workspace=self.ws, name='Other', file='logos/a.png')
         primary = Logo.objects.create(workspace=self.ws, name='Primary',
                                       file='logos/b.png', is_primary=True)
-        self.assertEqual(default_logo_id(self.ws), primary.id)
+        self.assertEqual(self.start(use_default_logo=True).logo, primary)
 
-    def test_falls_back_to_any_logo(self):
+    def test_stamps_nothing_when_no_logo_is_designated(self):
         from apps.brand_kit.models import Logo
-        from apps.creatives.generation import default_logo_id
-        only = Logo.objects.create(workspace=self.ws, name='Only', file='logos/a.png')
-        self.assertEqual(default_logo_id(self.ws), only.id)
+        Logo.objects.create(workspace=self.ws, name='Unmarked', file='logos/a.png')
+        self.assertIsNone(self.start(use_default_logo=True).logo)
 
-    def test_none_when_the_brand_kit_has_no_logo(self):
-        from apps.creatives.generation import default_logo_id
-        self.assertIsNone(default_logo_id(self.ws))
+    def test_stamps_nothing_when_the_brand_kit_is_empty(self):
+        self.assertIsNone(self.start(use_default_logo=True).logo)
+
+    def test_callers_that_ask_are_left_alone(self):
+        from apps.brand_kit.models import Logo
+        Logo.objects.create(workspace=self.ws, name='Primary', file='logos/b.png', is_primary=True)
+        # the dashboard sends logo_id itself, so an explicit "no logo" stays one
+        self.assertIsNone(self.start().logo)
+
+    def test_an_explicit_logo_still_wins(self):
+        from apps.brand_kit.models import Logo
+        Logo.objects.create(workspace=self.ws, name='Primary', file='logos/b.png', is_primary=True)
+        chosen = Logo.objects.create(workspace=self.ws, name='Chosen', file='logos/c.png')
+        from apps.creatives.generation import start_generation
+        with mock.patch('apps.creatives.services.generate_job_async'):
+            job, _ = start_generation(self.ws, {
+                'campaign_id': str(self.campaign.id), 'num_images': 1, 'logo_id': str(chosen.id),
+            }, use_default_logo=True)
+        self.assertEqual(job.logo, chosen)
+
+
+@override_settings(SLACK_SIGNING_SECRET=SECRET)
+class SlackMessageSyncTests(TestCase):
+    """Rating a creative anywhere rewrites the Slack messages it appears in."""
+
+    def setUp(self):
+        from apps.creatives.models import GeneratedCreative
+        self.user = User.objects.create_user(username='s', email='s@y.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.user)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.user, role='owner')
+        self.inst = SlackInstallation.objects.create(team_id='T1', bot_token='xoxb-1')
+        self.chan = SlackChannel.objects.create(
+            workspace=self.ws, installation=self.inst, channel_id='C1',
+            content_types=['logos'], auto_post_types=['logos'])
+        self.creative = GeneratedCreative.objects.create(
+            workspace=self.ws, name='Shot', image_url='https://cdn/a.png')
+
+    def post_it(self, ok=True, ts='111.222'):
+        """Post the creative to Slack the way notify_slack_edit does."""
+        from apps.slack_integration.services import notify_slack_edit
+        with mock.patch('apps.slack_integration.services._post',
+                        return_value={'ok': ok, 'ts': ts} if ok else {'ok': False}) as api:
+            notify_slack_edit(self.ws, self.creative, user=self.user)
+        return api
+
+    # ── recording ──────────────────────────────────────────────────────────
+    def test_posting_remembers_where_the_creative_landed(self):
+        from apps.slack_integration.models import SlackPostedMessage
+        self.post_it()
+        msg = SlackPostedMessage.objects.get()
+        self.assertEqual(msg.message_ts, '111.222')
+        self.assertEqual(msg.channel, self.chan)
+        self.assertEqual(list(msg.creatives.all()), [self.creative])
+        self.assertIn(f'rate:{self.creative.id}',
+                      [b.get('block_id') for b in msg.blocks])
+
+    def test_a_failed_post_records_nothing(self):
+        from apps.slack_integration.models import SlackPostedMessage
+        self.post_it(ok=False)
+        self.assertFalse(SlackPostedMessage.objects.exists())
+
+    # ── syncing ────────────────────────────────────────────────────────────
+    def test_rating_from_the_dashboard_updates_the_slack_message(self):
+        from apps.creatives.rating import apply_rating
+        from apps.slack_integration.services import sync_creative_rating
+        self.post_it()
+        with mock.patch('apps.fingerprint.services.trigger_analyze_generation'), \
+             mock.patch('apps.slack_integration.services._post',
+                        return_value={'ok': True}) as api:
+            apply_rating(self.creative, 9, user=self.user, source='dashboard')
+            sync_creative_rating(self.creative.id, actor='Eren')   # run inline, not in the thread
+        method, sent = api.call_args.args[1], api.call_args.args[2]
+        self.assertEqual(method, 'chat.update')
+        self.assertEqual(sent['ts'], '111.222')
+        self.assertEqual(sent['channel'], 'C1')
+        status = [b for b in sent['blocks'] if b.get('block_id') == f'rated:{self.creative.id}']
+        self.assertIn('4.5/5', status[0]['elements'][0]['text'])
+        self.assertIn('Eren', status[0]['elements'][0]['text'])
+
+    def test_the_winner_badge_syncs_too(self):
+        from apps.creatives.rating import toggle_winner
+        from apps.slack_integration.services import sync_creative_rating
+        self.post_it()
+        toggle_winner(self.creative, user=self.user)
+        with mock.patch('apps.slack_integration.services._post',
+                        return_value={'ok': True}) as api:
+            sync_creative_rating(self.creative.id)
+        sent = api.call_args.args[2]
+        row = [b for b in sent['blocks'] if b.get('block_id') == f'rate:{self.creative.id}'][0]
+        self.assertEqual(row['elements'][1]['text']['text'], ':trophy: Winner')
+        self.assertEqual(row['elements'][1]['style'], 'primary')
+
+    def test_a_successful_update_is_stored_so_the_next_one_builds_on_it(self):
+        from apps.slack_integration.models import SlackPostedMessage
+        from apps.slack_integration.services import sync_creative_rating
+        self.post_it()
+        self.creative.rating = 6
+        self.creative.save()
+        with mock.patch('apps.slack_integration.services._post', return_value={'ok': True}):
+            sync_creative_rating(self.creative.id)
+        stored = SlackPostedMessage.objects.get().blocks
+        self.assertIn('3/5', json.dumps(stored))
+
+    def test_a_rejected_update_leaves_the_stored_copy_alone(self):
+        from apps.slack_integration.models import SlackPostedMessage
+        from apps.slack_integration.services import sync_creative_rating
+        self.post_it()
+        before = SlackPostedMessage.objects.get().blocks
+        self.creative.rating = 6
+        self.creative.save()
+        with mock.patch('apps.slack_integration.services._post',
+                        return_value={'ok': False, 'error': 'message_not_found'}):
+            sync_creative_rating(self.creative.id)
+        self.assertEqual(SlackPostedMessage.objects.get().blocks, before)
+
+    def test_every_channel_the_creative_was_posted_to_is_updated(self):
+        from apps.slack_integration.models import SlackPostedMessage
+        from apps.slack_integration.services import sync_creative_rating
+        SlackChannel.objects.create(
+            workspace=self.ws, installation=self.inst, channel_id='C2',
+            content_types=['logos'], auto_post_types=['logos'])
+        # the edit notifier posts to both channels, so both get recorded
+        self.post_it()
+        self.assertEqual(SlackPostedMessage.objects.count(), 2)
+        with mock.patch('apps.slack_integration.services._post',
+                        return_value={'ok': True}) as api:
+            sync_creative_rating(self.creative.id)
+        channels = sorted(c.args[2]['channel'] for c in api.call_args_list)
+        self.assertEqual(channels, ['C1', 'C2'])
+
+    def test_a_creative_never_posted_costs_nothing(self):
+        from apps.slack_integration.services import sync_creative_rating
+        with mock.patch('apps.slack_integration.services._post') as api:
+            sync_creative_rating(self.creative.id)
+        api.assert_not_called()

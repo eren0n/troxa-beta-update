@@ -20,7 +20,7 @@ from apps.accounts.views import get_workspace
 from django.core.exceptions import ValidationError
 
 from apps.creatives.rating import apply_rating, toggle_winner
-from .models import SlackInstallation, SlackChannel, ALL_CONTENT_TYPES
+from .models import SlackInstallation, SlackChannel, SlackPostedMessage, ALL_CONTENT_TYPES
 from .services import (
     RATE_ACTION_ID, WINNER_ACTION_ID, refresh_rating_row,
     GEN_ACTIONS, GEN_BLOCK_BRIEF, GEN_BLOCK_CAMPAIGN, GEN_BLOCK_COUNT, GEN_BLOCK_PROMPT,
@@ -552,10 +552,15 @@ class SlackInteractionView(APIView):
             logger.exception('slack.interaction_failed action=%s creative=%s', action_id, creative_id)
             return Response(status=200)
 
-        # Slack wants an ack within 3 seconds and rewriting the message is
-        # another round trip, so it goes to a thread and this returns now.
+        # apply_rating/toggle_winner already pushed the change into every message
+        # we have on record, this one included. response_url is the fallback for
+        # messages posted before we started recording them — without it a click
+        # on an old post would apply the rating but leave the row stale.
         response_url = payload.get('response_url')
-        if response_url:
+        recorded = SlackPostedMessage.objects.filter(
+            channel=sc, message_ts=(payload.get('message') or {}).get('ts') or '',
+        ).exists()
+        if response_url and not recorded:
             threading.Thread(
                 target=refresh_rating_row,
                 args=(response_url, payload.get('message'), creative),
@@ -575,8 +580,7 @@ class SlackInteractionView(APIView):
         count and submit again without retyping the prompt.
         """
         from apps.creatives.generation import (
-            AUTO_MODE_MODEL, DEFAULT_BLEND_WEIGHT, FINGERPRINT_ALWAYS_ON,
-            default_logo_id, start_generation,
+            AUTO_MODE_MODEL, DEFAULT_BLEND_WEIGHT, FINGERPRINT_ALWAYS_ON, start_generation,
         )
         from .services import post_generation_queued
 
@@ -626,13 +630,12 @@ class SlackInteractionView(APIView):
                 'generation_mode': 'auto',
                 'use_fingerprint': FINGERPRINT_ALWAYS_ON,
                 'blend_weight': DEFAULT_BLEND_WEIGHT,
-                # Auto mode stamps the workspace's primary logo once the images
-                # come back; without this a Slack request produced bare
-                # creatives while the same request from the dashboard didn't.
-                'logo_id': default_logo_id(ws),
                 'actor': actor,
             },
             user=None, origin='slack', origin_channel=sc.channel_id,
+            # The dialog never asks about logos, so it stamps the workspace's
+            # designated one — and nothing when none is designated.
+            use_default_logo=True,
         )
         if err:
             return error_on(GEN_BLOCK_COUNT, err.get('detail', 'Could not start the generation.'))

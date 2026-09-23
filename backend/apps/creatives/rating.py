@@ -8,6 +8,7 @@ re-analysis, an activity-log entry), and anything added here later is picked up
 by both instead of only whichever side it was written on.
 """
 import logging
+import threading
 
 from apps.activity.utils import log_event
 
@@ -52,6 +53,23 @@ def _actor_label(user, actor):
     return (user.get_full_name() or '').strip() or user.email
 
 
+def _push_to_slack(creative, actor):
+    """
+    Mirror the change into any Slack message this creative was posted to.
+
+    Fire-and-forget: rating a creative in the gallery shouldn't wait on Slack,
+    and a Slack outage shouldn't fail the rating.
+    """
+    def run():
+        try:
+            from apps.slack_integration.services import sync_creative_rating
+            sync_creative_rating(creative.id, actor=actor or None)
+        except Exception:
+            logger.exception('rating.slack_sync_failed creative=%s', creative.id)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 def apply_rating(creative, value, *, user=None, source='dashboard', actor=None):
     """
     Set or clear a creative's rating. Returns True when the stored value changed.
@@ -87,6 +105,7 @@ def apply_rating(creative, value, *, user=None, source='dashboard', actor=None):
             'actor': _actor_label(user, actor),
         },
     )
+    _push_to_slack(creative, _actor_label(user, actor))
     return True
 
 
@@ -110,6 +129,7 @@ def toggle_winner(creative, *, user=None, source='dashboard', actor=None):
         f'{creative.name} {"marked as winner" if now_winner else "unmarked as winner"}',
         {'creative_id': str(creative.id), 'source': source, 'actor': _actor_label(user, actor)},
     )
+    _push_to_slack(creative, _actor_label(user, actor))
     return now_winner
 
 
