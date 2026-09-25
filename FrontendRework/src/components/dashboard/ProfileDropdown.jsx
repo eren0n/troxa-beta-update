@@ -64,7 +64,7 @@ export const ProfileDropdown = ({ variant = 'header', collapsed = false }) => {
       />
     ) : (
       <div
-        className={`${cls} flex items-center justify-center font-black`}
+        className={`${cls} flex items-center justify-center font-black text-white on-fill`}
         style={{ background: 'linear-gradient(to bottom right, var(--accent), var(--accent-hover))' }}
       >
         {initials}

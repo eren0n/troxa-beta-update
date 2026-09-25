@@ -169,17 +169,17 @@ export default function EditCreative() {
                             className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-all duration-300"
                             alt={creative.name} loading="lazy" decoding="async" />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                            <div className="px-4 py-2 bg-[color-mix(in_srgb,var(--accent)_90%,transparent)] backdrop-blur-sm rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] text-white text-xs font-bold flex items-center gap-2">
+                            <div className="px-4 py-2 bg-[color-mix(in_srgb,var(--accent)_90%,transparent)] backdrop-blur-sm rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] text-white on-fill text-xs font-bold flex items-center gap-2">
                               <Pencil className="w-3.5 h-3.5" /> Open Editor
                             </div>
                           </div>
                           <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest backdrop-blur-md border ${
-                              creative.logo_position !== 'No Logo' ? 'bg-blue-500/15 text-blue-400 border-blue-500/20' : 'bg-zinc-800/80 text-zinc-400 border-white/5'
-                            }`}>{creative.logo_position !== 'No Logo' ? 'Logo' : 'No Logo'}</span>
+                            <span className="media-chip" style={{ '--chip-tint': creative.logo_position !== 'No Logo' ? '#60a5fa' : 'rgba(255,255,255,0.45)' }}>
+                              <span className="media-chip-dot" /> {creative.logo_position !== 'No Logo' ? 'Logo' : 'No Logo'}
+                            </span>
                             {creative.source === 'uploaded' && (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest backdrop-blur-md border bg-amber-500/15 text-amber-400 border-amber-500/20">
-                                Uploaded
+                              <span className="media-chip" style={{ '--chip-tint': '#fbbf24' }}>
+                                <span className="media-chip-dot" /> Uploaded
                               </span>
                             )}
                           </div>
@@ -190,7 +190,7 @@ export default function EditCreative() {
                               allTags={allTags}
                               onChange={(tags) => handleTagsChange(creative.id, tags)}
                               onTagCreated={(tag) => setAllTags(prev => [...prev, tag])}
-                              triggerClassName="p-1.5 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 text-slate-300 hover:text-white transition-colors"
+                              triggerClassName="media-btn p-1.5 rounded-lg transition-colors"
                             />
                           </div>
                         </div>

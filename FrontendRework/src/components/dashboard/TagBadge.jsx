@@ -15,7 +15,14 @@ export default function TagBadge({ tag, onRemove, size = 'sm' }) {
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full font-black uppercase tracking-wider border ${px}`}
-      style={{ background: hexToRgba(color, 0.14), borderColor: hexToRgba(color, 0.35), color }}
+      // The raw tag color is chosen once for every mode — amber or lime text
+      // on a pale surface is ~2:1. Mixing toward the mode's --tag-ink keeps
+      // the hue but brings it to readable contrast in each.
+      style={{
+        background: hexToRgba(color, 0.14),
+        borderColor: hexToRgba(color, 0.4),
+        color: `color-mix(in oklab, ${color} var(--tag-ink-mix, 100%), var(--tag-ink, ${color}))`,
+      }}
     >
       {tag?.name}
       {onRemove && (

@@ -13,6 +13,11 @@ export const SOURCE_OPTIONS = [
   { id: 'uploaded', label: 'Uploaded' },
 ];
 
+const PANEL_SOURCE_OPTIONS = [
+  { id: '', label: 'All Sources' },
+  ...SOURCE_OPTIONS.slice(1),
+];
+
 export const MEDIA_TYPE_OPTIONS = [
   { id: '', label: 'All' },
   { id: 'Photo', label: 'Image' },
@@ -235,9 +240,12 @@ export default function CreativeFilterBar({
   allTags = [],
   contributorsList = [],
   showSearch = true,
-  // The gallery lists generated work only, so "which source" has nothing left
-  // to choose between there; the pickers still show both and keep it.
-  showSource = true,
+  // Where the Source choice lives: 'bar' (segmented control next to Type),
+  // 'panel' (a select inside the Filters dropdown) or 'none'.
+  sourcePlacement = 'bar',
+  // The source a fresh / cleared bar starts on. The gallery opens on Troxa
+  // Generated, so that isn't counted or chipped as an active filter there.
+  defaultSource = '',
   showMediaType = true,
   searchPlaceholder = 'Search by name or campaign...',
 }) {
@@ -261,11 +269,13 @@ export default function CreativeFilterBar({
     patch({ tags: f.tags.includes(id) ? f.tags.filter(t => t !== id) : [...f.tags, id] });
   };
 
+  const sourceActive = sourcePlacement !== 'none' && f.source !== defaultSource;
   const moreFilterCount = ['campaignId', 'aspectRatio', 'ratingMin', 'ratingMax', 'dateFrom', 'dateTo']
-    .filter(k => f[k]).length + f.tags.length + f.generatedBy.length;
-  const activeFilterCount = moreFilterCount + (showSource && f.source ? 1 : 0) + (showMediaType && f.mediaType ? 1 : 0);
+    .filter(k => f[k]).length + f.tags.length + f.generatedBy.length
+    + (sourcePlacement === 'panel' && sourceActive ? 1 : 0);
+  const activeFilterCount = moreFilterCount + (sourcePlacement === 'bar' && sourceActive ? 1 : 0) + (showMediaType && f.mediaType ? 1 : 0);
 
-  const clearAll = () => onChange({ ...EMPTY_CREATIVE_FILTERS, search: showSearch ? f.search : '', sort: f.sort, mediaType: showMediaType ? '' : f.mediaType });
+  const clearAll = () => onChange({ ...EMPTY_CREATIVE_FILTERS, source: defaultSource, search: showSearch ? f.search : '', sort: f.sort, mediaType: showMediaType ? '' : f.mediaType });
 
   const campaignName = f.campaignId ? campaignsList.find(c => c.id === f.campaignId)?.name : null;
 
@@ -291,7 +301,7 @@ export default function CreativeFilterBar({
         )}
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {showSource && (
+          {sourcePlacement === 'bar' && (
             <Segmented label="Source" options={SOURCE_OPTIONS} value={f.source} onChange={(v) => patch({ source: v })} />
           )}
           {showMediaType && (
@@ -326,10 +336,24 @@ export default function CreativeFilterBar({
                     <div className="flex items-center justify-between border-b border-(--border-subtle) pb-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-(--text-secondary)">More Filters</span>
                       {moreFilterCount > 0 && (
-                        <button onClick={() => patch({ campaignId: '', aspectRatio: '', ratingMin: '', ratingMax: '', dateFrom: '', dateTo: '', generatedBy: [], tags: [] })}
+                        <button onClick={() => patch({ campaignId: '', aspectRatio: '', ratingMin: '', ratingMax: '', dateFrom: '', dateTo: '', generatedBy: [], tags: [], ...(sourcePlacement === 'panel' ? { source: defaultSource } : {}) })}
                           className="text-[10px] font-bold text-red-400 hover:text-red-300 uppercase">Clear</button>
                       )}
                     </div>
+
+                    {sourcePlacement === 'panel' && (
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-(--text-muted)">Source</p>
+                        <PanelSelect
+                          value={f.source}
+                          options={PANEL_SOURCE_OPTIONS}
+                          onChange={(v) => patch({ source: v })}
+                          placeholder="All Sources"
+                          variant="panel"
+                          panelWidth={248}
+                        />
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <p className="text-[9px] font-black uppercase tracking-widest text-(--text-muted)">Campaign</p>
@@ -410,9 +434,9 @@ export default function CreativeFilterBar({
 
       {activeFilterCount > 0 && (
         <div className="flex flex-wrap items-center gap-2 justify-start">
-          {f.source && (
-            <span onClick={() => patch({ source: '' })} className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-full text-[10px] font-bold text-blue-400 cursor-pointer">
-              {SOURCE_OPTIONS.find(o => o.id === f.source)?.label} <X className="w-3 h-3" />
+          {sourceActive && (
+            <span onClick={() => patch({ source: defaultSource })} className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-full text-[10px] font-bold text-blue-400 cursor-pointer">
+              {PANEL_SOURCE_OPTIONS.find(o => o.id === f.source)?.label} <X className="w-3 h-3" />
             </span>
           )}
           {showMediaType && f.mediaType && (

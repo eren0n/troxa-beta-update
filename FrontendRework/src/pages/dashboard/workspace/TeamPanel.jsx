@@ -28,7 +28,8 @@ function MemberRow({ member, i, onRemove, canRemove, canEditRole, onEditRole }) 
   const [saving, setSaving] = useState(false);
 
   const user = member.user || member;
-  const displayName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Member';
+  // /team/members/ sends a ready-made `name`; the first/last fallback is for older payload shapes.
+  const displayName = member.name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email || 'Member';
   const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '??';
   const role = (member.role || 'analyst').toLowerCase();
   const RoleIcon = roleIcons[role];
@@ -62,12 +63,16 @@ function MemberRow({ member, i, onRemove, canRemove, canEditRole, onEditRole }) 
     >
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white shrink-0 shadow-sm"
-            style={{ background: 'linear-gradient(to bottom right, var(--accent), var(--accent-hover))', boxShadow: '0 1px 2px color-mix(in srgb, var(--accent) 20%, transparent)' }}
-          >
-            {initials}
-          </div>
+          {member.avatar_url ? (
+            <img src={member.avatar_url} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0 shadow-sm" />
+          ) : (
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white on-fill shrink-0 shadow-sm"
+              style={{ background: 'linear-gradient(to bottom right, var(--accent), var(--accent-hover))', boxShadow: '0 1px 2px color-mix(in srgb, var(--accent) 20%, transparent)' }}
+            >
+              {initials}
+            </div>
+          )}
           <div>
             <p className="text-sm font-bold text-white">{displayName}</p>
             <p className="text-[10px] text-slate-600">{user.email}</p>

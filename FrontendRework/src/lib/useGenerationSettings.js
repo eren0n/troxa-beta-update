@@ -1,3 +1,4 @@
+import { MODELS } from './generationOptions';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { brandKitApi, creativesApi, fingerprintApi } from './api';
@@ -31,7 +32,7 @@ export function useGenerationSettings(initial = {}) {
   // ── Core settings ──
   const [mode, setMode] = useState(initial.generation_mode || 'auto');
   const [selectedStatics, setSelectedStatics] = useState(initial.static_ids || []);
-  const [selectedModel, setSelectedModel] = useState(initial.model_name || 'Nano Banana 2');
+  const [selectedModel, setSelectedModel] = useState(initial.model_name || MODELS[0].name);
   const [ratios, setRatios] = useState(() => {
     if (initial.aspect_ratios?.length) return initial.aspect_ratios.map(ratioToOption);
     if (initial.aspect_ratio) return [ratioToOption(initial.aspect_ratio)];

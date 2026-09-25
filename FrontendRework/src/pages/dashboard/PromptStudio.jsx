@@ -14,6 +14,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
 import { useCreativeImage } from '../../lib/creativeUrl';
 import { CreativeImg } from '../../components/ui/CreativeImg';
+import PromptChipEditor from '../../components/dashboard/PromptChipEditor';
 
 // Each type has its own trigger character — Logo/CTA/Promo deliberately share "&" since
 // they're all "brand marketing marks" a static drops in, and 6 distinct symbols was one too many.
@@ -254,6 +255,8 @@ function ModelSelector({ value, onChange }) {
   );
 }
 
+const chipClassFor = (label) => (TAG_TYPE_BY_LABEL[label.toLowerCase()] || TAG_TYPES[0]).chip;
+
 const TAG_REGEX = /([*@#&])\[(Reference|Character|Environment|CTA|Promo|Logo):([^\]]+)\]/g;
 const EXAMPLE_PROMPT = '@[Character:Sarah] laughing in #[Environment:Studio White], holding &[CTA:Buy Now] next to a &[Promo:20% Off] sticker and the &[Logo:Primary Mark], shot like *[Reference:Reference 1]';
 
@@ -266,21 +269,13 @@ function renderTaggedText(text) {
   TAG_REGEX.lastIndex = 0;
   while ((m = TAG_REGEX.exec(text))) {
     if (m.index > lastIndex) nodes.push(<span key={i++}>{text.slice(lastIndex, m.index)}</span>);
-    const [, trigger, label, name] = m;
+    const [, , label, name] = m;
     const type = TAG_TYPE_BY_LABEL[label.toLowerCase()] || TAG_TYPES[0];
-    // This sits in the highlight layer behind an otherwise-invisible
-    // textarea (see the `backdropRef` overlay below) — the real input's
-    // caret has to land in the same spot the user sees here, so the tag's
-    // exact character count/width can't change from the raw `trigger[Label:
-    // Name]` syntax. What we *can* do without touching that: fade the
-    // syntax noise and bold the asset name within the same span, so it
-    // reads like a chip label at a glance instead of raw markup, while the
-    // rendered width stays identical either way.
+    // Same look as the chips PromptChipEditor renders in the prompt box.
     nodes.push(
-      <span key={i++} className={`inline rounded-full border px-1.5 ${type.chip}`}>
-        <span className="opacity-50">{trigger}[{label}:</span>
+      <span key={i++} className={`inline-flex items-baseline gap-1 rounded-full border px-2 mx-0.5 leading-snug ${type.chip}`}>
+        <span className="text-[9px] font-black uppercase tracking-wider opacity-60">{label}</span>
         <span className="font-bold">{name}</span>
-        <span className="opacity-50">]</span>
       </span>
     );
     lastIndex = TAG_REGEX.lastIndex;
@@ -514,7 +509,6 @@ function PromptStudioPage() {
   const [mentionStart, setMentionStart] = useState(-1);
   const [mentionIdx, setMentionIdx] = useState(0);
   const promptRef = useRef(null);
-  const backdropRef = useRef(null);
 
   const [showInfo, setShowInfo] = useState(null);
 
@@ -602,10 +596,8 @@ function PromptStudioPage() {
     return taggable.filter(t => groupKeys.has(t.type) && t.name?.toLowerCase().startsWith(mentionQuery.toLowerCase())).slice(0, 8);
   }, [taggable, mentionQuery, mentionGroup]);
 
-  const handlePromptChange = (e) => {
-    const val = e.target.value;
+  const handlePromptChange = (val, cursor) => {
     setPrompt(val);
-    const cursor = e.target.selectionStart;
     const before = val.slice(0, cursor);
     const m = before.match(/([*@#&])(\w*)$/);
     if (m) {
@@ -624,9 +616,9 @@ function PromptStudioPage() {
     const before = prompt.slice(0, mentionStart);
     const after = prompt.slice(mentionStart + 1 + mentionQuery.length);
     const tag = `${type.trigger}[${type.label}:${item.name}]`;
+    promptRef.current?.setCaretAfterUpdate(before.length + tag.length + 1);
     setPrompt(`${before}${tag} ${after}`);
     setMentionOpen(false);
-    setTimeout(() => promptRef.current?.focus(), 0);
   };
 
   const handlePromptKeyDown = (e) => {
@@ -660,8 +652,6 @@ function PromptStudioPage() {
     setModalType(null);
     setPendingMentionInsert(null);
   };
-
-  const syncScroll = (e) => { if (backdropRef.current) backdropRef.current.scrollTop = e.target.scrollTop; };
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !ratios.length || generating) return;
@@ -863,23 +853,14 @@ function PromptStudioPage() {
         />
 
         <div className="relative h-52 rounded-xl border border-white/8 focus-within:border-blue-500/50 bg-[#0c0f1a] transition-all">
-          <div
-            ref={backdropRef}
-            aria-hidden="true"
-            className="absolute inset-0 px-4 py-3.5 text-sm leading-relaxed whitespace-pre-wrap break-words overflow-y-auto pointer-events-none"
-          >
-            {renderTaggedText(prompt)}
-          </div>
-          <textarea
+          <PromptChipEditor
             ref={promptRef}
             value={prompt}
             onChange={handlePromptChange}
             onKeyDown={handlePromptKeyDown}
-            onScroll={syncScroll}
             onBlur={() => setTimeout(() => setMentionOpen(false), 150)}
+            chipClassFor={chipClassFor}
             placeholder="A golden retriever jumping into a pool, holding &[CTA:Buy Now] in its mouth…"
-            className="absolute inset-0 w-full h-full bg-transparent px-4 py-3.5 text-sm leading-relaxed outline-none resize-none placeholder:text-slate-600"
-            style={{ color: 'transparent', caretColor: 'var(--text-primary)' }}
           />
 
           {mentionOpen && (

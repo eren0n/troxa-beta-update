@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCreativeImage } from '../../lib/creativeUrl';
+import { SHIMMER_STYLE } from './Skeleton';
 
 /**
  * Drop-in <img> replacement for creative/logo images served by the
@@ -22,17 +23,20 @@ import { useCreativeImage } from '../../lib/creativeUrl';
  * item's preview) rather than an off-screen grid thumbnail — those should
  * still start loading the instant they mount.
  *
- * While waiting on either the visibility gate or the fetch itself, the
- * element shows the same shimmering gradient as CreativeGridSkeleton instead
- * of sitting there as a flat, static black box — the upstream fetch this
+ * While waiting on the visibility gate, the fetch, AND the browser decoding
+ * the blob, the element shows the same shimmering gradient as
+ * CreativeGridSkeleton instead of a flat box — the upstream fetch this
  * proxies (fal.media, Google Drive, ...) routinely takes a couple of
  * seconds, and a shimmer at least reads as "loading" instead of "broken".
+ * It stays up until the image has actually loaded, not just its blob URL.
  *
  * Props: `creativeId` (required), `logo` (optional, for the logo-applied
  * variant), `eager` (optional, skip the visibility gate), plus anything else
  * forwarded straight to the underlying <img> (className, alt, onLoad, ...).
  */
-export function CreativeImg({ creativeId, logo, eager = false, className = '', style, ...imgProps }) {
+const BLANK_GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+export function CreativeImg({ creativeId, logo, eager = false, className = '', style, onLoad, onError, ...imgProps }) {
   const imgRef = useRef(null);
   const [inView, setInView] = useState(eager);
 
@@ -57,24 +61,32 @@ export function CreativeImg({ creativeId, logo, eager = false, className = '', s
   }, [eager, inView]);
 
   const url = useCreativeImage(inView ? creativeId : null, { logo });
-  const loading = !url;
+  // A blob URL arriving isn't the image being on screen — decoding a large
+  // creative takes a visible moment, so hold the shimmer until onLoad.
+  const [loadedUrl, setLoadedUrl] = useState(null);
+  const loading = !url || loadedUrl !== url;
 
-  // Always render an <img>, never swap to a <div> placeholder while loading —
-  // passing `undefined` (not '') for a missing url omits the src attribute
-  // entirely, so there's no broken-image icon while it loads; the shimmer is
-  // just the <img>'s own CSS background showing through until it does.
+  // Always render an <img>, never swap to a <div> placeholder while loading.
+  // A sized <img> with NO src still gets the browser's broken-image icon in
+  // its corner (plus its alt text), so until the blob arrives it points at a
+  // 1x1 transparent GIF instead — a valid, empty image the shimmer (the
+  // <img>'s own CSS background) shows through.
   return (
     <img
       ref={imgRef}
-      src={url || undefined}
+      src={url || BLANK_GIF}
       className={`${className} ${loading ? 'animate-shimmer' : ''}`}
       style={{
-        ...(loading ? {
-          background: 'linear-gradient(90deg, var(--bg-hover) 25%, var(--border-default) 50%, var(--bg-hover) 75%)',
-          backgroundSize: '200% 100%',
-        } : null),
+        // Opaque base under the shimmer: cards sit the img on bg-black,
+        // which would swallow the light themes' translucent shimmer.
+        ...(loading ? { ...SHIMMER_STYLE, backgroundColor: 'var(--bg-card)' } : null),
+        // An <img> with no src still paints its alt text over the shimmer.
+        color: loading ? 'transparent' : undefined,
         ...style,
       }}
+      // the placeholder GIF loads too — only the real image counts
+      onLoad={(e) => { if (!url) return; setLoadedUrl(url); onLoad?.(e); }}
+      onError={(e) => { if (!url) return; setLoadedUrl(url); onError?.(e); }}
       {...imgProps}
     />
   );

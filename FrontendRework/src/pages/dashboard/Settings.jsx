@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, Bell, Palette, Globe, Lock, Eye, EyeOff,
-  ChevronRight, Check, Mail, Webhook,
+  ChevronRight, Check, Mail,
   Trash2, RefreshCw, AlertTriangle, User, CreditCard,
   Loader2, ExternalLink, Calendar, Sparkles,
   Smartphone, X, Copy, CheckCircle, Moon, Sun, Layout, Monitor,
@@ -621,14 +621,7 @@ export default function Settings() {
                     </div>
                   ))}
 
-                  <div className="pt-4 border-t border-white/5 flex justify-between items-center">
-                    <div className="flex gap-3">
-                      {[{ icon: Mail, label: 'Email' }, { icon: Webhook, label: 'Webhook' }].map((ch) => (
-                        <button key={ch.label} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-xs text-gray-400 transition-colors">
-                          <ch.icon className="w-3.5 h-3.5" /> {ch.label}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="pt-4 border-t border-white/5 flex justify-end items-center">
                     <button onClick={handleSaveNotifs} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-colors">
                       Save Preferences
                     </button>
@@ -854,7 +847,7 @@ export default function Settings() {
                           label: 'Light',
                           subtitle: 'Clean — soft slate whites',
                           icon: Sun,
-                          palette: ['#f0f4f8', '#e2e8f0', '#94a3b8', '#2563eb'],
+                          palette: ['#f0f4f8', '#e2e8f0', '#94a3b8', '#5181c7'],
                         },
                         {
                           id: 'custom',

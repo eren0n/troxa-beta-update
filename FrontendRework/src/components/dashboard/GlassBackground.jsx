@@ -133,12 +133,12 @@ const THEME_CONFIGS = {
   },
   light: {
     back:     [0.941, 0.957, 0.973],   // #f0f4f8 — lightest (valleys)
-    mid:      [0.702, 0.780, 0.867],   // #b3c7dd — mid ridge, more saturated
-    front:    [0.510, 0.635, 0.765],   // #82a2c3 — deepest ridge, real contrast to refract through glass
+    mid:      [0.737, 0.784, 0.839],   // #bcc8d6 — mid ridge, soft slate-blue
+    front:    [0.569, 0.639, 0.722],   // #91a3b8 — deepest ridge, still enough contrast to refract through glass
     fallback: '#f0f4f8',
     glows: [
-      'radial-gradient(ellipse 70% 55% at 15% 25%, rgba(37,99,235,.16) 0%,transparent 100%)',
-      'radial-gradient(ellipse 55% 65% at 85% 75%, rgba(99,102,241,.13) 0%,transparent 100%)',
+      'radial-gradient(ellipse 70% 55% at 15% 25%, rgba(45,100,210,.09) 0%,transparent 100%)',
+      'radial-gradient(ellipse 55% 65% at 85% 75%, rgba(90,100,200,.07) 0%,transparent 100%)',
     ].join(','),
     vignettes: [
       'radial-gradient(ellipse 100% 28% at 50% 0%,   rgba(224,231,240,.80) 0%,transparent 100%)',

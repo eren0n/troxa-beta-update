@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, SquarePlus, Image, Palette,
@@ -8,6 +9,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { preloadDashboardRoute } from '../../lib/dashboardRoutes';
 import { mgmtApi } from '../../lib/api';
+import { getPortalRoot } from '../../lib/portalRoot';
 
 const STORAGE_KEY = 'dock_pinned';
 
@@ -64,6 +66,40 @@ const TOOLTIP_STYLE = {
   borderRadius:          12,
 };
 
+// The dock scrolls horizontally on narrow screens (overflow-x-auto), and that
+// clips anything drawn above it — so tooltips are portaled out and pinned to
+// the hovered button's rect instead of living inside the nav.
+function DockTooltip({ anchor, children }) {
+  return createPortal(
+    <AnimatePresence>
+      {anchor && (
+        <motion.div
+          initial={{ opacity: 0, y: 8, scale: 0.85 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.85 }}
+          transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed pointer-events-none z-9999"
+          style={{ left: anchor.x, bottom: anchor.bottom, x: '-50%' }}
+        >
+          <div style={TOOLTIP_STYLE}>{children}</div>
+          <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-1 overflow-hidden">
+            <div
+              className="w-2 h-2 rotate-45 -translate-y-1/2"
+              style={{ background: 'var(--dropdown-bg)', border: '1px solid var(--border-subtle)' }}
+            />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    getPortalRoot()
+  );
+}
+
+const anchorFrom = (el) => {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, bottom: window.innerHeight - r.top + 12 };
+};
+
 export const BottomDock = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -93,6 +129,9 @@ export const BottomDock = () => {
   const [hoverVisible, setHoverVisible] = useState(false);
   const [hovered, setHovered] = useState(null);
   const [btnHovered, setBtnHovered] = useState(false);
+  // { x, bottom } viewport coords of the hovered button, for DockTooltip
+  const [tipAnchor, setTipAnchor] = useState(null);
+  const [btnAnchor, setBtnAnchor] = useState(null);
 
   // Auto-hide is a hover gesture — there's no hover on a touchscreen, so a
   // device with no fine pointer always behaves as pinned (and doesn't get
@@ -154,6 +193,46 @@ export const BottomDock = () => {
         )}
       </AnimatePresence>
 
+      {/* Tooltips (portaled — see DockTooltip) */}
+      {(() => {
+        const item = isVisible && hovered ? groups.flatMap(g => g.items).find(i => i.path === hovered) : null;
+        const locked = item && !item.isAdmin && (
+          (isFreeTier       && FREE_LOCKED.has(item.path)) ||
+          (isIndividualTier && INDIVIDUAL_LOCKED.has(item.path))
+        );
+        return (
+          <DockTooltip anchor={item ? tipAnchor : null}>
+            {item && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-white whitespace-nowrap">
+                {item.name}
+                {locked && <Lock className="w-2.5 h-2.5 text-slate-500 shrink-0" />}
+              </div>
+            )}
+          </DockTooltip>
+        );
+      })()}
+      {!isTouch && (
+        <DockTooltip anchor={isVisible && btnHovered ? btnAnchor : null}>
+          <div className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 whitespace-nowrap">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest"
+              style={{ color: pinned ? 'var(--accent)' : 'var(--text-muted)' }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{
+                  background: pinned ? 'var(--accent)' : 'var(--text-faint)',
+                  boxShadow:  pinned ? '0 0 6px var(--accent)' : 'none',
+                }}
+              />
+              {pinned ? 'Pinned' : 'Auto-hide'}
+            </span>
+            <span className="text-[10px] text-gray-600">
+              {pinned ? 'Click to auto-hide' : 'Click to pin'}
+            </span>
+          </div>
+        </DockTooltip>
+      )}
+
       {/* Inner wrapper restores pointer events */}
       <div style={{ pointerEvents: 'auto' }}>
         <AnimatePresence>
@@ -204,36 +283,9 @@ export const BottomDock = () => {
                       <div
                         key={item.path}
                         className="relative shrink-0"
-                        onMouseEnter={() => { setHovered(item.path); preloadDashboardRoute(item.path); }}
-                        onMouseLeave={() => setHovered(null)}
+                        onMouseEnter={(e) => { setHovered(item.path); setTipAnchor(anchorFrom(e.currentTarget)); preloadDashboardRoute(item.path); }}
+                        onMouseLeave={() => { setHovered(null); setTipAnchor(null); }}
                       >
-                        {/* Tooltip */}
-                        <AnimatePresence>
-                          {isHov && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 8, scale: 0.85 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: 8, scale: 0.85 }}
-                              transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
-                              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 pointer-events-none z-50"
-                            >
-                              <div
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-white whitespace-nowrap"
-                                style={TOOLTIP_STYLE}
-                              >
-                                {item.name}
-                                {isLocked && <Lock className="w-2.5 h-2.5 text-slate-500 shrink-0" />}
-                              </div>
-                              <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-1 overflow-hidden">
-                                <div
-                                  className="w-2 h-2 rotate-45 -translate-y-1/2"
-                                  style={{ background: 'var(--dropdown-bg)', border: '1px solid var(--border-subtle)' }}
-                                />
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-
                         {/* Icon button */}
                         <motion.div
                           role="button"
@@ -273,51 +325,9 @@ export const BottomDock = () => {
 
                 <div
                   className="relative"
-                  onMouseEnter={() => setBtnHovered(true)}
-                  onMouseLeave={() => setBtnHovered(false)}
+                  onMouseEnter={(e) => { setBtnHovered(true); setBtnAnchor(anchorFrom(e.currentTarget)); }}
+                  onMouseLeave={() => { setBtnHovered(false); setBtnAnchor(null); }}
                 >
-                  {/* Button tooltip — shows current mode + what click will do */}
-                  <AnimatePresence>
-                    {btnHovered && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.85 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.85 }}
-                        transition={{ duration: 0.13, ease: [0.16, 1, 0.3, 1] }}
-                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 pointer-events-none z-50"
-                      >
-                        <div
-                          className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 whitespace-nowrap"
-                          style={TOOLTIP_STYLE}
-                        >
-                          {/* Current state label */}
-                          <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest"
-                            style={{ color: pinned ? 'var(--accent)' : 'var(--text-muted)' }}
-                          >
-                            <span
-                              className="w-1.5 h-1.5 rounded-full shrink-0"
-                              style={{
-                                background: pinned ? 'var(--accent)' : 'var(--text-faint)',
-                                boxShadow:  pinned ? '0 0 6px var(--accent)' : 'none',
-                              }}
-                            />
-                            {pinned ? 'Pinned' : 'Auto-hide'}
-                          </span>
-                          {/* Action hint */}
-                          <span className="text-[10px] text-gray-600">
-                            {pinned ? 'Click to auto-hide' : 'Click to pin'}
-                          </span>
-                        </div>
-                        <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-1 overflow-hidden">
-                          <div
-                            className="w-2 h-2 rotate-45 -translate-y-1/2"
-                            style={{ background: 'var(--dropdown-bg)', border: '1px solid var(--border-subtle)' }}
-                          />
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
                   <motion.button
                     aria-label={pinned ? 'Switch to auto-hide' : 'Pin dock'}
                     onClick={togglePin}

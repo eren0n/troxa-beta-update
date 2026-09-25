@@ -13,7 +13,7 @@ import { FONT_OPTIONS, PALETTE_ROLES, fontStack, ensureFontLoaded, getContrastTe
 import LockedFeature from '../../components/dashboard/LockedFeature';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { Skeleton } from '../../components/ui/Skeleton';
-import ReferencesPanel from '../../components/dashboard/ReferencesPanel';
+import GeneratedCreatives from './GeneratedCreatives';
 
 function SectionHeader({ icon: Icon, iconColor, title, desc, action }) {
   return (
@@ -119,23 +119,23 @@ function AssetTile({ item, icon: Icon, isEditing, editingValue, onEditingChange,
       </div>
 
       {item.is_primary && (
-        <span className="absolute top-2 left-2 inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-white bg-amber-500 px-1.5 py-0.5 rounded-full shadow-lg shadow-black/30">
-          <Star className="w-2 h-2 fill-white" /> Default
+        <span className="media-chip absolute top-2 left-2" style={{ '--chip-tint': '#fbbf24' }}>
+          <Star className="w-2 h-2 fill-current" /> Default
         </span>
       )}
 
       {isEditor && (
         <div className="absolute top-2 right-2 flex gap-1">
-          <button onClick={onStartEdit} className="p-1.5 bg-black/60 backdrop-blur-sm text-white/70 hover:text-white rounded-lg transition-all">
+          <button onClick={onStartEdit} title="Rename" className="media-btn p-1.5 rounded-lg transition-all">
             <Edit2 className="w-3 h-3" />
           </button>
           {!item.is_primary && (
-            <button onClick={onSetPrimary} title="Set as default" className="p-1.5 bg-black/60 backdrop-blur-sm text-white/70 hover:text-amber-400 rounded-lg transition-all">
+            <button onClick={onSetPrimary} title="Set as default" className="media-btn p-1.5 rounded-lg transition-all hover:text-amber-300!">
               <Star className="w-3 h-3" />
             </button>
           )}
           {isAdmin && (
-            <button onClick={onDelete} className="p-1.5 bg-black/60 backdrop-blur-sm text-white/70 hover:text-red-400 rounded-lg transition-all">
+            <button onClick={onDelete} title="Delete" className="media-btn p-1.5 rounded-lg transition-all hover:text-red-300!">
               <Trash2 className="w-3 h-3" />
             </button>
           )}
@@ -169,9 +169,9 @@ function AssetUploadTile({ onClick, uploading }) {
     >
       <div className="aspect-square flex flex-col items-center justify-center gap-2">
         <div className="w-9 h-9 rounded-xl bg-white/4 group-hover:bg-blue-500/10 border border-white/6 group-hover:border-blue-500/20 flex items-center justify-center transition-all">
-          {uploading ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" /> : <Upload className="w-4 h-4 text-slate-600 group-hover:text-blue-400 transition-colors" />}
+          {uploading ? <Loader2 className="w-4 h-4 text-blue-400 animate-spin" /> : <Upload className="w-4 h-4 text-slate-500 group-hover:text-blue-400 transition-colors" />}
         </div>
-        <span className="text-[9px] font-black text-slate-700 group-hover:text-blue-400 uppercase tracking-widest transition-colors">{uploading ? 'Uploading…' : 'Upload'}</span>
+        <span className="text-[9px] font-black text-slate-500 group-hover:text-blue-400 uppercase tracking-widest transition-colors">{uploading ? 'Uploading…' : 'Upload'}</span>
       </div>
       <div className="py-2" />
     </button>
@@ -341,7 +341,7 @@ function CreateTabContent({ name, setName, nameLabel, namePlaceholder, prompt, s
               )}
               <button
                 onClick={() => onRemoveRef(r.id)}
-                className="absolute top-0.5 right-0.5 p-0.5 bg-black/70 text-red-400 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                className="absolute top-0.5 right-0.5 p-0.5 media-btn hover:text-red-300! rounded-md opacity-0 group-hover:opacity-100 transition-all"
               >
                 <X className="w-2.5 h-2.5" />
               </button>
@@ -349,17 +349,17 @@ function CreateTabContent({ name, setName, nameLabel, namePlaceholder, prompt, s
           ))}
           <button
             onClick={() => uploadInputRef.current?.click()}
-            className="w-16 h-16 shrink-0 border-2 border-dashed border-white/8 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-lg flex flex-col items-center justify-center gap-1 transition-all group"
+            className="w-16 h-16 shrink-0 border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-lg flex flex-col items-center justify-center gap-1 transition-all group"
           >
             <Upload className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition-colors" />
-            <span className="text-[8px] font-black text-slate-700 group-hover:text-blue-400 uppercase tracking-wider transition-colors">Upload</span>
+            <span className="text-[8px] font-black text-slate-500 group-hover:text-blue-400 uppercase tracking-wider transition-colors">Upload</span>
           </button>
           <button
             onClick={onOpenLibrary}
-            className="w-16 h-16 shrink-0 border-2 border-dashed border-white/8 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-lg flex flex-col items-center justify-center gap-1 transition-all group"
+            className="w-16 h-16 shrink-0 border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-lg flex flex-col items-center justify-center gap-1 transition-all group"
           >
             <Images className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition-colors" />
-            <span className="text-[8px] font-black text-slate-700 group-hover:text-blue-400 uppercase tracking-wider transition-colors text-center leading-tight">Library</span>
+            <span className="text-[8px] font-black text-slate-500 group-hover:text-blue-400 uppercase tracking-wider transition-colors text-center leading-tight">Library</span>
           </button>
         </div>
       </div>
@@ -1157,7 +1157,7 @@ function BrandKitPage() {
                         <img src={charModalPreviews[0]} alt="" className="w-full h-full object-cover" />
                         <button
                           onClick={() => removeCharModalFile(0)}
-                          className="absolute top-1 right-1 p-1 bg-black/70 text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          className="absolute top-1 right-1 p-1 media-btn hover:text-red-300! rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1165,10 +1165,10 @@ function BrandKitPage() {
                     ) : (
                       <button
                         onClick={() => charModalFileInputRef.current?.click()}
-                        className="w-32 h-32 border-2 border-dashed border-white/8 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-xl flex flex-col items-center justify-center gap-2 transition-all group"
+                        className="w-32 h-32 border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-xl flex flex-col items-center justify-center gap-2 transition-all group"
                       >
                         <Upload className="w-5 h-5 text-slate-600 group-hover:text-blue-400 transition-colors" />
-                        <span className="text-[9px] font-black text-slate-700 group-hover:text-blue-400 uppercase tracking-widest transition-colors">Upload Image</span>
+                        <span className="text-[9px] font-black text-slate-500 group-hover:text-blue-400 uppercase tracking-widest transition-colors">Upload Image</span>
                       </button>
                     )}
                   </div>
@@ -1277,7 +1277,7 @@ function BrandKitPage() {
                         <img src={envPreview} alt="" className="w-full h-full object-cover" />
                         <button
                           onClick={() => { URL.revokeObjectURL(envPreview); setEnvFile(null); setEnvPreview(''); }}
-                          className="absolute top-2 right-2 p-1 bg-black/70 text-red-400 rounded-lg transition-all"
+                          className="absolute top-2 right-2 p-1 media-btn hover:text-red-300! rounded-lg transition-all"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1285,10 +1285,10 @@ function BrandKitPage() {
                     ) : (
                       <button
                         onClick={() => envModalFileRef.current?.click()}
-                        className="w-full aspect-video border-2 border-dashed border-white/8 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all group"
+                        className="w-full aspect-video border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all group"
                       >
                         <Upload className="w-5 h-5 text-slate-600 group-hover:text-blue-400 transition-colors" />
-                        <span className="text-[9px] font-black text-slate-700 group-hover:text-blue-400 uppercase tracking-widest transition-colors">Choose Image</span>
+                        <span className="text-[9px] font-black text-slate-500 group-hover:text-blue-400 uppercase tracking-widest transition-colors">Choose Image</span>
                       </button>
                     )}
                   </div>
@@ -1510,7 +1510,7 @@ function BrandKitPage() {
 
         {activeTab === 'references' && (
           <motion.div key="references" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
-            <ReferencesPanel isEditor={isEditor} />
+            <GeneratedCreatives mode="references" isEditor={isEditor} />
           </motion.div>
         )}
 
@@ -1587,7 +1587,7 @@ function BrandKitPage() {
                             {isAdmin && (
                               <button
                                 onClick={e => { e.stopPropagation(); removeCharacter(char.id); }}
-                                className="p-1.5 text-slate-700 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -1651,7 +1651,7 @@ function BrandKitPage() {
                                       {isEditor && (
                                         <button
                                           onClick={() => deleteCharImg(char.id, img.id)}
-                                          className="absolute top-1 right-1 p-1 bg-black/70 text-red-400 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                          className="absolute top-1 right-1 p-1 media-btn hover:text-red-300! rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                                         >
                                           <X className="w-3 h-3" />
                                         </button>
@@ -1662,12 +1662,12 @@ function BrandKitPage() {
                                     <button
                                       onClick={() => { charImgCharIdRef.current = char.id; charImgInputRef.current?.click(); }}
                                       disabled={uploadingCharImg === char.id}
-                                      className="w-28 h-28 shrink-0 snap-start border-2 border-dashed border-white/6 hover:border-blue-500/30 hover:bg-blue-500/4 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all group cursor-pointer disabled:opacity-60"
+                                      className="w-28 h-28 shrink-0 snap-start border-2 border-dashed border-white/15 hover:border-blue-500/30 hover:bg-blue-500/4 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all group cursor-pointer disabled:opacity-60"
                                     >
                                       <div className="w-7 h-7 rounded-lg bg-white/4 group-hover:bg-blue-500/10 border border-white/6 group-hover:border-blue-500/20 flex items-center justify-center transition-all">
                                         {uploadingCharImg === char.id ? <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-slate-600 group-hover:text-blue-400 transition-colors" />}
                                       </div>
-                                      <span className="text-[9px] font-black text-slate-700 group-hover:text-blue-400 uppercase tracking-widest transition-colors">{uploadingCharImg === char.id ? 'Uploading…' : 'Add'}</span>
+                                      <span className="text-[9px] font-black text-slate-500 group-hover:text-blue-400 uppercase tracking-widest transition-colors">{uploadingCharImg === char.id ? 'Uploading…' : 'Add'}</span>
                                     </button>
                                   )}
                                 </HorizontalGallery>
@@ -1845,7 +1845,7 @@ function BrandKitPage() {
                             {isAdmin && (
                               <button
                                 onClick={e => { e.stopPropagation(); removePalettePreset(preset.id); }}
-                                className="p-1.5 text-slate-700 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -1994,7 +1994,7 @@ function BrandKitPage() {
                             {isAdmin && (
                               <button
                                 onClick={e => { e.stopPropagation(); removeTypographyPreset(preset.id); }}
-                                className="p-1.5 text-slate-700 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -2294,7 +2294,7 @@ function BrandKitPage() {
                               <button
                                 onClick={() => setDefaultDisclaimer(d.id)}
                                 title="Set as default"
-                                className="p-1 text-slate-700 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                className="p-1 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                               >
                                 <Star className="w-3 h-3" />
                               </button>
@@ -2302,7 +2302,7 @@ function BrandKitPage() {
                             {isAdmin && (
                               <button
                                 onClick={() => removeDisclaimer(d.id)}
-                                className="p-1 text-slate-700 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -2314,7 +2314,7 @@ function BrandKitPage() {
                   </AnimatePresence>
                   {disclaimers.length === 0 && !loading && (
                     <div className="py-8 text-center bg-white/2 border border-white/5 rounded-xl">
-                      <p className="text-[11px] text-slate-700">No disclaimers added yet</p>
+                      <p className="text-[11px] text-slate-500">No disclaimers added yet</p>
                     </div>
                   )}
                 </div>
@@ -2362,7 +2362,7 @@ function BrandKitPage() {
                   ))}
                 </AnimatePresence>
                 {forbiddenKeywords.length === 0 && !loading && (
-                  <p className="text-[11px] text-slate-700 py-1">No forbidden words added yet</p>
+                  <p className="text-[11px] text-slate-500 py-1">No forbidden words added yet</p>
                 )}
               </div>
               {isEditor && (

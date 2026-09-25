@@ -74,7 +74,7 @@ const COLOR_MODES = [
     label: 'Light',
     subtitle: 'Clean — soft slate whites',
     icon: Sun,
-    palette: ['#f0f4f8', '#e2e8f0', '#94a3b8', '#2563eb'],
+    palette: ['#f0f4f8', '#e2e8f0', '#94a3b8', '#5181c7'],
     preview: 'bg-linear-to-br from-[#f0f4f8] to-[#e2e8f0]',
     textClass: 'text-slate-800',
     borderClass: 'border-slate-200',

@@ -6,14 +6,15 @@ import { Sparkles, TrendingUp, Users, Flame } from 'lucide-react';
 // only offered 3 of these 7 models, at different (wrong) credit costs, and
 // had no way to notice when Generate's list changed. Both surfaces import
 // from here now, so there's exactly one list to update.
+// First entry is the default a fresh Generate form starts on.
 export const MODELS = [
-  { name: 'Nano Banana 2',    credits: 1, meta: 'Fast · $0.06/img',       badge: 'Recommended', badgeColor: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
-  { name: 'Nano Banana Pro',  credits: 2, meta: 'Premium · $0.12/img',    badge: 'Pro',          badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20' },
-  { name: 'GPT Image 2',      credits: 2, meta: 'Balanced · $0.20/img',   badge: 'High Quality', badgeColor: 'bg-purple-500/15 text-purple-400 border-purple-500/20' },
-  { name: 'Grok Imagine',     credits: 1, meta: 'Ultra-fast · $0.02/img', badge: 'Budget',       badgeColor: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
-  { name: 'Seedream 5.0 Pro', credits: 2, meta: 'Premium · $0.15/img',    badge: 'Pro',          badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20' },
-  { name: 'Ideogram v4',      credits: 1, meta: 'Fast · $0.06/img',       badge: 'Fast',         badgeColor: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
-  { name: 'Qwen Image 2 Pro', credits: 1, meta: 'Fast · $0.06/img',       badge: 'Fast',         badgeColor: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+  { name: 'GPT Image 2',      credits: 2, meta: 'Balanced',   badge: 'Recommended',  badgeColor: 'bg-blue-500/15 text-blue-400 border-blue-500/20' },
+  { name: 'Nano Banana 2',    credits: 1, meta: 'Fast',       badge: 'Fast',         badgeColor: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+  { name: 'Nano Banana Pro',  credits: 2, meta: 'Premium',    badge: 'Pro',          badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20' },
+  { name: 'Grok Imagine',     credits: 1, meta: 'Ultra-fast', badge: 'Budget',       badgeColor: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20' },
+  { name: 'Seedream 5.0 Pro', credits: 2, meta: 'Premium',    badge: 'Pro',          badgeColor: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20' },
+  { name: 'Ideogram v4',      credits: 1, meta: 'Fast',       badge: 'Fast',         badgeColor: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
+  { name: 'Qwen Image 2 Pro', credits: 1, meta: 'Fast',       badge: 'Fast',         badgeColor: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20' },
 ];
 
 export const RATIO_OPTIONS  = ['1:1 — Square', '4:5 — Portrait', '9:16 — Story', '16:9 — Landscape'];

@@ -67,6 +67,9 @@
   --accent:         #3b82f6;
   --accent-hover:   #2563eb;
   --accent-muted:   rgba(59, 130, 246, 0.15);
+  /* Accent used as TEXT (links, active labels) — split from the fill so a
+     mode can soften its buttons without dropping text below AA. */
+  --accent-text:    #3b82f6;
 
   --glass-bg:       rgba(8, 11, 24, 0.56);
   --glass-filter:   blur(18px) saturate(105%);
@@ -82,6 +85,14 @@
   --dropdown-bg:    rgba(8, 11, 20, 0.92);
   --selection-bg:   rgba(59, 130, 246, 0.25);
   --selection-text: #bfdbfe;
+
+  /* Ink for colored chips (tags): the tag's own color is mixed toward this
+     so it stays legible on this mode's surfaces — lifted on dark, deepened
+     on light. */
+  --tag-ink:        #ffffff;
+  --tag-ink-mix:    80%;
+  /* Unfilled rating star — --text-faint is too close to the card here. */
+  --star-empty:     #5b6475;
 }
 
 /* Light mode — soft slate */
@@ -99,7 +110,9 @@
   --bg-hover:    rgba(0, 0, 0, 0.04);
   --bg-chip:     rgba(0, 0, 0, 0.06);
 
-  --text-primary:   #0f172a;
+  /* slate-800, not slate-900: near-black text on the pale slate surfaces
+     read harsh; this is still ~12:1. */
+  --text-primary:   #1e293b;
   --text-secondary: #475569;
   --text-muted:     #64748b;
   --text-faint:     #94a3b8;
@@ -108,18 +121,41 @@
   --border-default: rgba(0, 0, 0, 0.10);
   --border-strong:  rgba(0, 0, 0, 0.20);
 
-  /* Lighter resting blue (blue-500) so solid-fill buttons don't read as
-     heavy/muddy on a light background; hover deepens to the old blue-600. */
-  --accent:         #3b82f6;
-  --accent-hover:   #2563eb;
-  --accent-muted:   rgba(59, 130, 246, 0.12);
+  /* Softened blue. Tailwind's blues (chroma up to .245 in oklch) are tuned
+     for dark UIs; on pale slate they glare. Fill ~4:1 under white labels,
+     text variant ~5.3:1 on --bg-base. */
+  --accent:         #5181c7;
+  --accent-hover:   #4471b7;
+  --accent-muted:   rgba(81, 129, 199, 0.12);
+  --accent-text:    #3d65a7;
+  /* Ink on solid fills — see LABELS ON SOLID FILLS. */
+  --on-fill:        #eaf1fc;
+
+  /* Same treatment for the raw Tailwind blue/indigo/sky scales, so the many
+     utilities not routed through --accent (group-hover:bg-blue-600,
+     bg-blue-500/60, gradients, focus rings…) calm down too. Same lightness
+     steps, roughly half the chroma. Tailwind v4 reads these vars at use. */
+  --color-blue-300:   #a4c8f1;
+  --color-blue-400:   #78a8e2;
+  --color-blue-500:   #588ad1;
+  --color-blue-600:   #4877c0;
+  --color-blue-700:   #3d64aa;
+  --color-blue-800:   #35538f;
+  --color-blue-900:   #304675;
+  --color-indigo-400: #8793d6;
+  --color-indigo-500: #6f78c7;
+  --color-sky-300:    #9cd0ea;
+  --color-sky-400:    #68b6dd;
+  --color-sky-500:    #50a2d0;
 
   /* Lower opacity + stronger saturate so the animated background actually
      shows/refracts through the card (glassmorphism needs ~15-30% fill,
      75% read as a flat opaque panel). Shadows deepened for elevation
      since light surfaces have less inherent depth cue than dark ones. */
   --glass-bg:       rgba(255, 255, 255, 0.46);
-  --glass-filter:   blur(20px) saturate(180%);
+  /* saturate(180%) turned the blue background ridges electric behind every
+     card; a light boost keeps the refraction without the color cast. */
+  --glass-filter:   blur(20px) saturate(125%);
   --glass-border:   rgba(0, 0, 0, 0.12);
   --glass-rim:      rgba(255, 255, 255, 0.95);
 
@@ -130,8 +166,12 @@
   --scrollbar-hover: #94a3b8;
 
   --dropdown-bg:    rgba(255, 255, 255, 0.96);
-  --selection-bg:   rgba(59, 130, 246, 0.20);
+  --selection-bg:   rgba(81, 129, 199, 0.18);
   --selection-text: #1e3a8a;
+
+  --tag-ink:        #0f172a;
+  --tag-ink-mix:    62%;
+  --star-empty:     #7b889c;
 }
 
 /* Custom mode — Sunset (light warm pastel + orange accent) */
@@ -161,6 +201,7 @@
   --accent:         #f97316;
   --accent-hover:   #ea6c0a;
   --accent-muted:   rgba(249, 115, 22, 0.15);
+  --accent-text:    #f97316;
 
   --glass-bg:       rgba(255, 248, 238, 0.48);
   --glass-filter:   blur(20px) saturate(170%);
@@ -176,6 +217,10 @@
   --dropdown-bg:    rgba(255, 248, 240, 0.96);
   --selection-bg:   rgba(249, 115, 22, 0.20);
   --selection-text: #7c2d12;
+
+  --tag-ink:        #1c0f05;
+  --tag-ink-mix:    62%;
+  --star-empty:     #a5835f;
 }
 
 /* ────────────────────────────────────────────────────────
@@ -371,9 +416,9 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .hover\:bg-blue-600:hover { background-color: var(--accent-hover) !important; }
 .border-blue-400      { border-color: var(--accent)          !important; }
 .border-blue-500      { border-color: var(--accent)          !important; }
-.text-blue-300        { color: var(--accent)                 !important; }
-.text-blue-400        { color: var(--accent)                 !important; }
-.text-blue-500        { color: var(--accent)                 !important; }
+.text-blue-300        { color: var(--accent-text)            !important; }
+.text-blue-400        { color: var(--accent-text)            !important; }
+.text-blue-500        { color: var(--accent-text)            !important; }
 .hover\:text-blue-300:hover { color: var(--accent-hover)      !important; }
 .hover\:text-blue-400:hover { color: var(--accent-hover)      !important; }
 .group:hover .group-hover\:text-blue-400 { color: var(--accent-hover) !important; }
@@ -432,6 +477,71 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 .group:hover .group-hover\:drop-shadow-accent { filter: drop-shadow(0 0 10px var(--accent)); }
 .shadow-accent-glow                        { box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent) !important; }
 .border-accent-glow                        { border-color: var(--accent) !important; box-shadow: 0 0 15px color-mix(in srgb, var(--accent) 25%, transparent) !important; }
+
+/* ────────────────────────────────────────────────────────
+   LABELS ON SOLID FILLS (light mode) — the neutral override above turns
+   .text-white into --text-primary, which is right for text on the page
+   but put near-black labels on solid blue/violet/red/green buttons.
+   Anything that is BOTH a saturated fill and text-white gets --on-fill
+   ink (a pastel near-white — pure white glared on the soft blue), as does
+   text-white inside one, and hover-filled buttons on hover.
+   Fills the class list can't see — an inline-style gradient (avatars) or a
+   sibling pill animated behind the label (segmented switchers) — opt in
+   with `.on-fill` on the text element.
+   Amber/yellow fills are left out on purpose: white on them is ~2:1.
+   Sunset keeps dark ink — white on its orange accent is under 3:1.
+   ──────────────────────────────────────────────────────── */
+[data-color-mode="light"] :is(.bg-\(--accent\), .bg-\(--accent-hover\), .bg-blue-400, .bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-violet-500, .bg-violet-600, .bg-purple-600, .bg-indigo-600, .bg-red-500, .bg-red-600, .bg-emerald-500, .bg-emerald-600, .bg-emerald-800, .bg-green-500, .bg-green-600, .bg-sky-500):is(.text-white, .hover\:text-white),
+[data-color-mode="light"] :is(.bg-\(--accent\), .bg-\(--accent-hover\), .bg-blue-400, .bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-violet-500, .bg-violet-600, .bg-purple-600, .bg-indigo-600, .bg-red-500, .bg-red-600, .bg-emerald-500, .bg-emerald-600, .bg-emerald-800, .bg-green-500, .bg-green-600, .bg-sky-500) .text-white { color: var(--on-fill) !important; }
+[data-color-mode="light"] :is(.hover\:bg-\(--accent\), .hover\:bg-\(--accent-hover\), .hover\:bg-blue-500, .hover\:bg-blue-600, .hover\:bg-blue-700, .hover\:bg-violet-600, .hover\:bg-red-500, .hover\:bg-red-600, .hover\:bg-emerald-500, .hover\:bg-green-500):hover:is(.text-white, .hover\:text-white) { color: var(--on-fill) !important; }
+[data-color-mode="light"] .on-fill,
+[data-color-mode="light"] .on-fill .text-white { color: var(--on-fill) !important; }
+
+/* ────────────────────────────────────────────────────────
+   OVER-MEDIA CHROME — chips, badges and buttons drawn on top of a photo
+   or video. What's under them is the image, not a themed surface, so
+   they must NOT follow the color mode: the neutral overrides above turn
+   .text-white dark and .bg-black/40 white in light/custom modes, which
+   left these unreadable on bright images. One dark scrim + white ink in
+   every mode; color comes from a small dot/icon via --chip-tint.
+   ──────────────────────────────────────────────────────── */
+.media-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(7, 9, 16, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+.media-chip > svg { color: var(--chip-tint, #fff); }
+.media-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--chip-tint, #fff);
+  flex-shrink: 0;
+}
+/* Round icon button on media (winner trophy, remove, ...). */
+.media-btn {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(7, 9, 16, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+.media-btn:hover { color: #fff; background: rgba(7, 9, 16, 0.75); }
+/* Full-cover dim over media (rendering / failed states). */
+.media-scrim { background: rgba(0, 0, 0, 0.55); }
 
 .animate-spin-slow {
   animation: spin-slow 20s linear infinite;

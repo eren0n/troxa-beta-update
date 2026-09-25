@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  User, Mail, Briefcase, Globe, Clock, Camera, Edit3, Save, X,
+  User, Mail, Briefcase, Globe, Clock, Camera, Edit3, Save, X, Trash2,
   Sparkles, Download, Trophy, Star, Zap, Shield, ChevronRight,
   Calendar, MapPin, Link as LinkIcon, Twitter, Linkedin, Check,
   CreditCard, Loader2,
@@ -53,6 +53,7 @@ export default function Profile() {
   const [avatarHovered, setAvatarHovered] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [avatarFile, setAvatarFile] = useState(null);
+  const [removeAvatar, setRemoveAvatar] = useState(false);
   const [activity, setActivity] = useState([]);
   const fileRef = useRef(null);
 
@@ -84,7 +85,7 @@ export default function Profile() {
     };
     setForm(data);
     setOriginalForm(data);
-    if (u.avatar_url) setAvatarPreview(u.avatar_url);
+    setAvatarPreview(u.avatar_url || null);
   }, []);
 
   useEffect(() => {
@@ -102,6 +103,7 @@ export default function Profile() {
     const file = e.target.files?.[0];
     if (!file) return;
     setAvatarFile(file);
+    setRemoveAvatar(false);
     const reader = new FileReader();
     reader.onloadend = () => setAvatarPreview(reader.result);
     reader.readAsDataURL(file);
@@ -110,8 +112,9 @@ export default function Profile() {
   const handleCancel = () => {
     if (originalForm) setForm(originalForm);
     if (user?.avatar_url) setAvatarPreview(user.avatar_url);
-    else if (!avatarFile) setAvatarPreview(null);
+    else setAvatarPreview(null);
     setAvatarFile(null);
+    setRemoveAvatar(false);
     setIsEditing(false);
     setSaveError('');
   };
@@ -138,12 +141,16 @@ export default function Profile() {
         fd.append('website', form.website);
         await authApi.uploadAvatar(fd);
       } else {
-        await authApi.updateMe({ first_name, last_name, bio: form.bio, location: form.location, timezone: form.timezone, language: form.language, twitter: form.twitter, linkedin: form.linkedin, website: form.website });
+        await authApi.updateMe({
+          first_name, last_name, bio: form.bio, location: form.location, timezone: form.timezone, language: form.language, twitter: form.twitter, linkedin: form.linkedin, website: form.website,
+          ...(removeAvatar ? { remove_avatar: true } : {}),
+        });
       }
 
       const updated = await refreshUser();
       if (updated) loadUserIntoForm(updated);
       setAvatarFile(null);
+      setRemoveAvatar(false);
       setSaved(true);
       setIsEditing(false);
       setTimeout(() => setSaved(false), 3000);
@@ -211,7 +218,7 @@ export default function Profile() {
                 <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <div
-                  className="w-full h-full flex items-center justify-center text-white text-3xl font-black"
+                  className="w-full h-full flex items-center justify-center text-white on-fill text-3xl font-black"
                   style={{ background: 'linear-gradient(to bottom right, var(--accent), var(--accent-hover))' }}
                 >
                   {initials}
@@ -227,8 +234,20 @@ export default function Profile() {
                 <Camera className="w-6 h-6 text-white" />
               </motion.div>
             )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+            <input ref={fileRef} type="file" accept="image/*" onChange={(e) => { handleAvatarChange(e); e.target.value = ''; }} className="hidden" />
             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2" style={{ borderColor: 'var(--bg-card)' }} />
+            {/* Remove — only while editing and there's a photo to remove; applied on Save */}
+            <AnimatePresence>
+              {isEditing && avatarPreview && (
+                <motion.button type="button" title="Remove photo" aria-label="Remove photo"
+                  initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }}
+                  onClick={(e) => { e.stopPropagation(); setAvatarPreview(null); setAvatarFile(null); setRemoveAvatar(true); }}
+                  className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg border-2 transition-colors z-10"
+                  style={{ borderColor: 'var(--bg-card)' }}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="flex-1">

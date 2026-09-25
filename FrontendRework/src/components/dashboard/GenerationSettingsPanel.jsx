@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Check, Plus, X, Image as ImageIcon, ChevronDown, Info, Wand2, Sliders,
@@ -6,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GLASS_STYLE } from '../ui/GlassCard';
+import { getPortalRoot } from '../../lib/portalRoot';
 import { CreativeGridSkeleton } from '../ui/Skeleton';
 import { CreativeImg } from '../ui/CreativeImg';
 import CreativeFilterBar from './CreativeFilterBar';
@@ -53,15 +56,16 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
           <div className="flex items-center gap-3">
             {s.selectedStatics.length > 0 && (
               <motion.span initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                className="text-[10px] font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+                className="text-[10px] font-black text-blue-400">
                 {s.selectedStatics.length} selected
               </motion.span>
             )}
             <AnimatePresence>
               {s.selectedStatics.length > 0 && (
                 <motion.button initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => s.setSelectedStatics([])} className="text-[10px] uppercase font-semibold text-red-500/60 hover:text-red-500/80 transition-colors">
-                  Clear
+                  type="button" onClick={() => s.setSelectedStatics([])}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider text-red-400 bg-red-500/10 border border-red-500/25 hover:bg-red-500/20 hover:border-red-500/40 hover:text-red-300 transition-colors">
+                  <X className="w-3 h-3" /> Clear
                 </motion.button>
               )}
             </AnimatePresence>
@@ -75,6 +79,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
             campaignsList={s.campaigns}
             allTags={s.allTags}
             contributorsList={s.contributorsList}
+            sourcePlacement="none"
             showMediaType={false}
             searchPlaceholder="Search reference photos..."
           />
@@ -138,7 +143,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
         <div style={GLASS_STYLE} className="rounded-2xl p-1.5 flex gap-1.5">
           {[{ key: 'auto', label: 'Auto', Icon: Wand2 }, { key: 'custom', label: 'Custom', Icon: Sliders }].map(({ key, label, Icon }) => (
             <button key={key} onClick={() => s.setMode(key)}
-              className={`relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 ${s.mode === key ? 'text-white' : 'text-slate-600 hover:text-slate-400'}`}>
+              className={`relative flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 ${s.mode === key ? 'text-white on-fill' : 'text-slate-600 hover:text-slate-400'}`}>
               {s.mode === key && (
                 <motion.div layoutId="gen-mode-pill" className="absolute inset-0 bg-blue-600 rounded-xl shadow-lg shadow-blue-600/25" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
@@ -151,7 +156,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
         {/* Campaign Selector */}
         <div style={GLASS_STYLE} className="rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Campaign</label>
+            <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Campaign</label>
             <button type="button" onClick={() => s.setIsAddingCampaign(!s.isAddingCampaign)} className="text-[10px] font-black text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors uppercase tracking-wider">
               {s.isAddingCampaign ? 'Cancel' : '+ New'}
             </button>
@@ -328,7 +333,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
             </div>
             <AspectRatioSelector ratios={s.ratios} onChange={s.setRatios} />
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Images per Reference</label>
+              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Images per Reference</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4].map((n) => (
                   <button key={n} onClick={() => s.setNumImages(n)} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${s.numImages === n ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white/4 border border-white/6 text-slate-500 hover:text-white hover:border-white/10'}`}>{n}</button>
@@ -400,50 +405,15 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
         {/* Custom mode: Character + Model + Settings */}
         {s.mode === 'custom' && (
           <>
-            {s.characters.length > 0 && (
-              <div style={GLASS_STYLE} className="rounded-2xl p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center"><Sparkles className="w-3 h-3 text-violet-400" /></div>
-                  <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Character</span>
-                  <span className="text-[10px] text-slate-700 font-normal normal-case tracking-normal">(optional)</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => s.setSelectedCharacterId('')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${!s.selectedCharacterId ? 'bg-white/8 border-white/15 text-white' : 'border-white/6 text-slate-500 hover:text-slate-300 hover:border-white/10'}`}>
-                    None
-                  </button>
-                  {s.characters.map(char => (
-                    <button key={char.id} onClick={() => s.setSelectedCharacterId(s.selectedCharacterId === char.id ? '' : char.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${s.selectedCharacterId === char.id ? 'bg-violet-500/15 border-violet-500/30 text-violet-300' : 'border-white/6 text-slate-400 hover:text-white hover:border-white/12'}`}>
-                      {char.name}
-                      {char.images?.length > 0 && <span className="text-[9px] opacity-60">{char.images.length} img</span>}
-                    </button>
-                  ))}
-                </div>
-                {s.selectedCharacterId && <p className="text-[10px] text-violet-400/70">Reference photos overridden by character</p>}
-              </div>
-            )}
-
             <div style={GLASS_STYLE} className="rounded-2xl p-5 space-y-3">
-              <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">AI Model</label>
-              <div className="space-y-2">
-                {MODELS.map((model) => (
-                  <motion.button key={model.name} whileHover={{ scale: 1.005 }} whileTap={{ scale: 0.995 }} onClick={() => s.setSelectedModel(model.name)}
-                    className={`w-full p-3.5 text-left border rounded-xl transition-all flex items-center justify-between ${s.selectedModel === model.name ? 'border-blue-500 bg-blue-500/6' : 'border-white/6 hover:border-white/10'}`}>
-                    <div>
-                      <p className="text-sm font-black text-white">{model.name}</p>
-                      <p className="text-[10px] text-slate-600 mt-0.5">{model.meta}</p>
-                    </div>
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${model.badgeColor}`}>{model.badge}</span>
-                  </motion.button>
-                ))}
-              </div>
+              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">AI Model</label>
+              <ModelSelect value={s.selectedModel} onChange={s.setSelectedModel} />
             </div>
 
             <div style={GLASS_STYLE} className="rounded-2xl p-5 space-y-4">
               <AspectRatioSelector ratios={s.ratios} onChange={s.setRatios} />
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Images per Reference</label>
+                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Images per Reference</label>
                 <div className="flex gap-2">
                   {[1, 2, 3, 4].map((n) => (
                     <button key={n} onClick={() => s.setNumImages(n)} className={`flex-1 py-2.5 rounded-xl text-sm font-black transition-all ${s.numImages === n ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white/4 border border-white/6 text-slate-500 hover:text-white hover:border-white/10'}`}>{n}</button>
@@ -451,7 +421,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
+                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">
                   Extra Instructions <span className="text-slate-700 normal-case font-normal">(optional{s.characters.length > 0 ? ' — type @ to mention a character' : ''})</span>
                 </label>
                 <div className="relative">
@@ -475,12 +445,12 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Negative Prompt <span className="text-slate-700 normal-case font-normal">(optional)</span></label>
+                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Negative Prompt <span className="text-slate-700 normal-case font-normal">(optional)</span></label>
                 <textarea rows={2} value={s.negativePrompt} onChange={(e) => s.setNegativePrompt(e.target.value)} placeholder="What to avoid: blur, text, watermark..."
                   className="w-full bg-[#0c0f1a] border border-white/8 hover:border-white/12 focus:border-red-500/50 rounded-xl p-3 text-sm text-white outline-none transition-all resize-none placeholder:text-slate-700" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Disclaimer Overlay <span className="text-slate-700 normal-case font-normal">(optional)</span></label>
+                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Disclaimer Overlay <span className="text-slate-700 normal-case font-normal">(optional)</span></label>
                 <div className="relative">
                   <select value={s.selectedDisclaimer} onChange={(e) => s.setSelectedDisclaimer(e.target.value)} className="w-full bg-[#0c0f1a] border border-white/8 hover:border-white/12 focus:border-blue-500 rounded-xl py-3 px-4 text-sm text-white outline-none appearance-none cursor-pointer transition-all">
                     <option value="">None</option>
@@ -491,7 +461,7 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
               </div>
               {/* Logo */}
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Logo <span className="text-slate-700 normal-case font-normal">(optional)</span></label>
+                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Logo <span className="text-slate-700 normal-case font-normal">(optional)</span></label>
                 {(() => {
                   const sel = s.brandKitLogos.find(l => l.id === s.selectedLogoId);
                   return sel ? (
@@ -510,6 +480,14 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
                 })()}
               </div>
             </div>
+
+            {s.characters.length > 0 && (
+              <CharacterPicker
+                characters={s.characters}
+                selectedId={s.selectedCharacterId}
+                onSelect={s.setSelectedCharacterId}
+              />
+            )}
           </>
         )}
 
@@ -631,7 +609,7 @@ function AspectRatioSelector({ ratios, onChange }) {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Aspect Ratio</label>
+        <label className="block text-[10px] font-black text-slate-600 uppercase tracking-widest">Aspect Ratio</label>
         {canAdd && (
           <button type="button" onClick={addRatio} className="text-[10px] font-black text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors uppercase tracking-wider">
             <Plus className="w-3 h-3" /> Add more
@@ -658,6 +636,138 @@ function AspectRatioSelector({ ratios, onChange }) {
         </AnimatePresence>
       </div>
       {ratios.length > 1 && <p className="text-[10px] text-slate-700">{ratios.length} formats — each generates separately</p>}
+    </div>
+  );
+}
+
+// Model picker as a dropdown — the stacked list of seven cards pushed the rest
+// of the settings a screen down. Portaled to the theme root with fixed
+// positioning (like CreativeFilterBar's PanelSelect) so the neighbouring glass
+// cards, each its own stacking context, can't paint over the open menu.
+function ModelSelect({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const selected = MODELS.find(m => m.name === value) || MODELS[0];
+
+  const updatePosition = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuH = Math.min(MODELS.length * 58 + 12, 360);
+    const below = window.innerHeight - rect.bottom;
+    const up = below < menuH + 12 && rect.top > below;
+    setPos({ left: rect.left, width: rect.width, maxHeight: menuH, ...(up ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }) });
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    updatePosition();
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const Badge = ({ model }) => (
+    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${model.badgeColor}`}>{model.badge}</span>
+  );
+
+  return (
+    <>
+      <button type="button" ref={btnRef} onClick={() => { if (!open) updatePosition(); setOpen(v => !v); }}
+        className={`w-full p-3.5 text-left border rounded-xl transition-all flex items-center justify-between gap-3 bg-(--bg-input) ${open ? 'border-blue-500' : 'border-white/10 hover:border-white/20'}`}>
+        <div className="min-w-0">
+          <p className="text-sm font-black text-white truncate">{selected.name}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{selected.meta}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge model={selected} />
+          <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+      {createPortal(
+        <AnimatePresence>
+          {open && pos && (
+            <>
+              <div className="fixed inset-0 z-9998" onClick={() => setOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98, y: 4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98, y: 4 }}
+                className="fixed z-9999 overflow-y-auto backdrop-blur-xl border border-(--border-default) rounded-xl shadow-2xl p-1.5 space-y-0.5"
+                style={{ background: 'var(--dropdown-bg)', ...pos }}
+              >
+                {MODELS.map(model => {
+                  const active = model.name === selected.name;
+                  return (
+                    <button key={model.name} type="button" onClick={() => { onChange(model.name); setOpen(false); }}
+                      className={`w-full px-3 py-2.5 rounded-lg text-left flex items-center justify-between gap-3 transition-colors ${active ? 'bg-(--accent-muted)' : 'hover:bg-(--bg-hover)'}`}>
+                      <div className="min-w-0">
+                        <p className={`text-xs font-black truncate ${active ? 'text-(--accent-text)' : 'text-(--text-primary)'}`}>{model.name}</p>
+                        <p className="text-[10px] text-(--text-muted) mt-0.5">{model.meta}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge model={model} />
+                        <Check className={`w-3.5 h-3.5 text-(--accent-text) ${active ? '' : 'invisible'}`} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        getPortalRoot()
+      )}
+    </>
+  );
+}
+
+// Optional character, collapsed to its first few chips: a workspace with a
+// long cast turned this into a wall of buttons. The selected character always
+// stays visible, even when it's past the fold.
+const CHARACTERS_COLLAPSED = 3;
+
+function CharacterPicker({ characters, selectedId, onSelect }) {
+  const [expanded, setExpanded] = useState(false);
+  const hidden = characters.length - CHARACTERS_COLLAPSED;
+  let visible = expanded || hidden <= 0 ? characters : characters.slice(0, CHARACTERS_COLLAPSED);
+  if (selectedId && !visible.some(c => c.id === selectedId)) {
+    const sel = characters.find(c => c.id === selectedId);
+    if (sel) visible = [...visible, sel];
+  }
+
+  return (
+    <div style={GLASS_STYLE} className="rounded-2xl p-5 space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="w-5 h-5 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center"><Sparkles className="w-3 h-3 text-violet-400" /></div>
+        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Character</span>
+        <span className="text-[10px] text-slate-500 font-normal normal-case tracking-normal">(optional)</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => onSelect('')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${!selectedId ? 'bg-white/8 border-white/15 text-white' : 'border-white/10 text-slate-500 hover:text-slate-300 hover:border-white/15'}`}>
+          None
+        </button>
+        {visible.map(char => (
+          <button key={char.id} onClick={() => onSelect(selectedId === char.id ? '' : char.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${selectedId === char.id ? 'bg-violet-500/15 border-violet-500/30 text-violet-300' : 'border-white/10 text-slate-400 hover:text-white hover:border-white/15'}`}>
+            {char.name}
+            {char.images?.length > 0 && <span className="text-[9px] opacity-60">{char.images.length} img</span>}
+          </button>
+        ))}
+        {hidden > 0 && (
+          <button onClick={() => setExpanded(v => !v)}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-white transition-colors flex items-center gap-1">
+            {expanded ? 'Show less' : `Show more (+${hidden})`}
+            <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+      </div>
+      {selectedId && <p className="text-[10px] text-violet-400/70">Reference photos overridden by character</p>}
     </div>
   );
 }

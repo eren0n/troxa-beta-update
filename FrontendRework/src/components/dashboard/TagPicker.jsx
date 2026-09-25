@@ -79,7 +79,7 @@ export default function TagPicker({ creativeId, currentTags = [], allTags = [], 
       <button
         ref={buttonRef}
         onClick={toggleOpen}
-        className={triggerClassName || 'p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-500 hover:text-white transition-colors'}
+        className={triggerClassName || 'p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-(--text-primary) transition-colors'}
         title="Tags"
       >
         <Tag className="w-3.5 h-3.5" />

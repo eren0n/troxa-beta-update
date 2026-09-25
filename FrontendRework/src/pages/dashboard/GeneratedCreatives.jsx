@@ -6,12 +6,13 @@ import {
   X, Image as ImageIcon, Sparkles,
   ChevronLeft, ChevronRight, Send, Loader2, ChevronDown,
   TrendingUp, MousePointerClick, DollarSign, Eye, Users, Hash, Trophy,
+  ListChecks, ImageMinus,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { creativesApi, brandKitApi, metaApi, slackApi } from '../../lib/api';
 import { useGeneration } from '../../contexts/GenerationContext';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
-import { CreativeGridSkeleton } from '../../components/ui/Skeleton';
+import { CreativeCardSkeleton } from '../../components/ui/Skeleton';
 import { CreativeImg } from '../../components/ui/CreativeImg';
 import { getPortalRoot } from '../../lib/portalRoot';
 import { useCreativeGallery } from '../../lib/useCreativeGallery';
@@ -19,6 +20,8 @@ import CreativeFilterBar, { EMPTY_CREATIVE_FILTERS } from '../../components/dash
 import PhotoCreativeCard from '../../components/dashboard/PhotoCreativeCard';
 import VideoCreativeCard from '../../components/dashboard/VideoCreativeCard';
 import CreativeLightbox from '../../components/dashboard/CreativeLightbox';
+import UploadCreativeButton from '../../components/dashboard/UploadCreativeButton';
+import ReferenceCard from '../../components/dashboard/ReferenceCard';
 
 // ── Generating placeholder card ───────────────────────────────────────────────
 // Shown at the top of the gallery while a generation job is in progress.
@@ -297,7 +300,7 @@ function MetaPostModal({ creative, onClose, onPosted }) {
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-9999 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[10000] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div
@@ -407,24 +410,35 @@ function MetaPostModal({ creative, onClose, onPosted }) {
   );
 }
 
-export default function GeneratedCreatives() {
+// Brand Kit → References is this same page scoped to reference photos, so it
+// gets the gallery's cards, filters, full-screen viewer and loading states
+// rather than a look-alike that drifts. These are pinned in that mode; the
+// filter bar's "clear" would otherwise wipe them.
+const REFERENCE_FILTERS = { isReference: 'true', mediaType: 'Photo' };
+
+export default function GeneratedCreatives({ mode = 'gallery', isEditor = true }) {
+  const isRefs = mode === 'references';
   const navigate = useNavigate();
   const location = useLocation();
-  const [view, setView] = useState('grid');
+  const [viewPref, setView] = useState('grid');
+  const view = isRefs ? 'grid' : viewPref;
   const [campaignsList, setCampaignsList] = useState([]);
   const [allTags, setAllTags] = useState([]);
   const [contributorsList, setContributorsList] = useState([]);
-  // The gallery shows what Troxa produced. Uploaded images are reference
-  // material and live under Brand Kit → References, so they are filtered out
-  // here rather than mixed in with the work.
-  const [filters, setFilters] = useState({
+  // The gallery opens on what Troxa produced; uploaded images are reference
+  // material (managed under Brand Kit → References) and can still be pulled
+  // in from the Source select in the Filters dropdown.
+  const [filters, setFilters] = useState(isRefs ? { ...EMPTY_CREATIVE_FILTERS, ...REFERENCE_FILTERS } : {
     ...EMPTY_CREATIVE_FILTERS,
     source: 'troxa_generated',
     ...(location.state?.mediaType ? { mediaType: location.state.mediaType } : {}),
     ...(location.state?.isEdited ? { isEdited: location.state.isEdited } : {}),
   });
-  const { creatives, setCreatives, loading, hasMore, sentinelRef, refresh } = useCreativeGallery(filters, allTags, { pageSize: 10 });
-  const pendingCards = usePendingJobs(refresh);
+  const changeFilters = isRefs ? (f) => setFilters({ ...f, ...REFERENCE_FILTERS }) : setFilters;
+  const { creatives, setCreatives, loading, loadingMore, hasMore, sentinelRef, refresh } = useCreativeGallery(filters, allTags, { pageSize: 10 });
+  const pendingJobCards = usePendingJobs(refresh);
+  // In-flight generations belong to the gallery, not the reference library.
+  const pendingCards = isRefs ? [] : pendingJobCards;
 
   // Lightbox
   const [lightbox, setLightbox] = useState(null); // { items:[{url,name,creative}], index }
@@ -438,14 +452,19 @@ export default function GeneratedCreatives() {
   const [commentSaving, setCommentSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // creativeId
 
+  // Reference library bulk-select
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkRemoving, setBulkRemoving] = useState(false);
+
   // Meta post
   const [metaModal, setMetaModal] = useState(null);
   const [metaMetrics, setMetaMetrics] = useState({});
   const [slackModal, setSlackModal] = useState(null);
 
   useEffect(() => {
-    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'instant' });
-  }, []);
+    if (!isRefs) document.querySelector('main')?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [isRefs]);
 
   useEffect(() => {
     Promise.all([
@@ -509,21 +528,68 @@ export default function GeneratedCreatives() {
     setCreatives(prev => prev.map(c => c.id === creative.id ? { ...c, is_reference: next } : c));
     try {
       await creativesApi.updateFeedback(creative.id, { is_reference: next });
+      // Un-referencing in the library takes it out of the library.
+      if (isRefs && !next) dropFromView(creative.id);
     } catch (_) {
       setCreatives(prev => prev.map(c => c.id === creative.id ? { ...c, is_reference: !next } : c));
     }
   };
 
+  const dropFromView = (id) => {
+    setCreatives(prev => prev.filter(c => c.id !== id));
+    setLightbox(lb => {
+      if (!lb) return lb;
+      const remaining = lb.items.filter(it => it.creative?.id !== id);
+      if (remaining.length === 0) return null;
+      return { ...lb, items: remaining, index: Math.min(lb.index, remaining.length - 1) };
+    });
+  };
+
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
+
+  useEffect(() => {
+    if (!selectMode) return;
+    const onKey = (e) => { if (e.key === 'Escape') exitSelectMode(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectMode]);
+
+  const toggleSelected = (creative) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(creative.id)) next.delete(creative.id); else next.add(creative.id);
+      return next;
+    });
+  };
+
+  const allLoadedSelected = creatives.length > 0 && creatives.every(c => selectedIds.has(c.id));
+  const toggleSelectAll = () => {
+    setSelectedIds(allLoadedSelected ? new Set() : new Set(creatives.map(c => c.id)));
+  };
+
+  // Un-reference every selected image; any that fail stay selected and in
+  // view so they can be retried.
+  const removeSelectedReferences = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length || bulkRemoving) return;
+    setBulkRemoving(true);
+    const results = await Promise.allSettled(
+      ids.map(id => creativesApi.updateFeedback(id, { is_reference: false }))
+    );
+    const removed = new Set(ids.filter((_, i) => results[i].status === 'fulfilled'));
+    setCreatives(prev => prev.filter(c => !removed.has(c.id)));
+    setLightbox(null);
+    const failed = new Set(ids.filter(id => !removed.has(id)));
+    setSelectedIds(failed);
+    if (!failed.size) setSelectMode(false);
+    setBulkRemoving(false);
+  };
+
   const handleDeleteCreative = async (id) => {
     try {
       await creativesApi.deleteCreative(id);
-      setCreatives(prev => prev.filter(c => c.id !== id));
+      dropFromView(id);
       setDeleteConfirm(null);
-      if (lightbox) {
-        const remaining = lightbox.items.filter(it => it.creative?.id !== id);
-        if (remaining.length === 0) { setLightbox(null); }
-        else { setLightbox({ ...lightbox, items: remaining, index: Math.min(lightbox.index, remaining.length - 1) }); }
-      }
     } catch (_) {}
   };
 
@@ -648,78 +714,162 @@ export default function GeneratedCreatives() {
         )}
       </AnimatePresence>
 
-      {/* Meta Post Modal */}
-      <AnimatePresence>
-        {metaModal && (
-          <MetaPostModal
-            creative={metaModal}
-            onClose={() => setMetaModal(null)}
-            onPosted={() => onMetaPosted(metaModal)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Slack Post Modal */}
-      <AnimatePresence>
-        {slackModal && (
-          <SlackPostModal
-            creative={slackModal}
-            onClose={() => setSlackModal(null)}
-            onPosted={() => onSlackPosted(slackModal)}
-          />
-        )}
-      </AnimatePresence>
+      {/* Meta / Slack Post Modals — both open from the lightbox, which is
+          portaled to the theme root. Rendered in place they'd sit inside the
+          page-transition transform's stacking context and end up under it no
+          matter their z-index, so they portal to the same root. */}
+      {createPortal(
+        <AnimatePresence>
+          {metaModal && (
+            <MetaPostModal
+              creative={metaModal}
+              onClose={() => setMetaModal(null)}
+              onPosted={() => onMetaPosted(metaModal)}
+            />
+          )}
+        </AnimatePresence>,
+        getPortalRoot()
+      )}
+      {createPortal(
+        <AnimatePresence>
+          {slackModal && (
+            <SlackPostModal
+              creative={slackModal}
+              onClose={() => setSlackModal(null)}
+              onPosted={() => onSlackPosted(slackModal)}
+            />
+          )}
+        </AnimatePresence>,
+        getPortalRoot()
+      )}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white uppercase font-sans">Gallery</h1>
-          <p className="text-gray-500 mt-2 text-sm italic">AI-rendered creative drops awaiting final approval and publication</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div style={GLASS_STYLE} className="flex items-center gap-1.5 p-1 rounded-xl">
-            <button
-              onClick={() => setView('grid')}
-              className={`p-2 rounded-lg transition-colors font-black ${view === 'grid' ? 'text-(--bg-base)' : 'text-gray-500 hover:text-white'}`}
-              style={view === 'grid' ? { background: 'var(--text-primary)' } : undefined}
-            >
-              <Grid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setView('list')}
-              className={`p-2 rounded-lg transition-colors font-black ${view === 'list' ? 'text-(--bg-base)' : 'text-gray-500 hover:text-white'}`}
-              style={view === 'list' ? { background: 'var(--text-primary)' } : undefined}
-            >
-              <List className="w-4 h-4" />
-            </button>
+        {isRefs ? (
+          <div>
+            <h3 className="text-sm font-black text-white">Reference Images</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5 max-w-xl">
+              What generations are built from — uploads, plus creatives promoted from the gallery.
+              These are the images the Generate tab offers as references.
+            </p>
           </div>
-          {/* Uploading moved to Brand Kit → References: an uploaded image is
-              reference material, and it no longer appears in this gallery. */}
-          <button onClick={() => navigate('/dashboard/create')}
-            className="px-6 py-2.5 bg-(--accent) hover:bg-(--accent-hover) text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-accent-glow">
-            <Sparkles className="w-4 h-4" /> Generate New
-          </button>
+        ) : (
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white uppercase font-sans">Gallery</h1>
+            <p className="text-gray-500 mt-2 text-sm italic">AI-rendered creative drops awaiting final approval and publication</p>
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          {/* The reference library is grid-only: its cards are the lean kind. */}
+          {!isRefs && (
+            <div style={GLASS_STYLE} className="flex items-center gap-1.5 p-1 rounded-xl">
+              <button
+                onClick={() => setView('grid')}
+                className={`p-2 rounded-lg transition-colors font-black ${view === 'grid' ? 'text-(--bg-base)' : 'text-gray-500 hover:text-white'}`}
+                style={view === 'grid' ? { background: 'var(--text-primary)' } : undefined}
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setView('list')}
+                className={`p-2 rounded-lg transition-colors font-black ${view === 'list' ? 'text-(--bg-base)' : 'text-gray-500 hover:text-white'}`}
+                style={view === 'list' ? { background: 'var(--text-primary)' } : undefined}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {/* Uploading lives in the reference library: an uploaded image is
+              reference material, not generated work. */}
+          {isRefs ? (
+            isEditor && (
+              <>
+                {/* Secondary to Upload: same size, outline only. While
+                    selecting, the floating bar owns the exit instead. */}
+                {creatives.length > 0 && !selectMode && (
+                  <button type="button" onClick={() => setSelectMode(true)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 border border-(--border-default) text-(--text-secondary) hover:text-(--text-primary) hover:border-(--border-strong) hover:bg-(--bg-hover) transition-all">
+                    <ListChecks className="w-4 h-4" /> Select
+                  </button>
+                )}
+                <UploadCreativeButton onUploaded={refresh} accept="image/*" />
+              </>
+            )
+          ) : (
+            <button onClick={() => navigate('/dashboard/create')}
+              className="px-6 py-2.5 bg-(--accent) hover:bg-(--accent-hover) text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg shadow-accent-glow">
+              <Sparkles className="w-4 h-4" /> Generate New
+            </button>
+          )}
         </div>
       </div>
 
       {/* Filter bar */}
       <CreativeFilterBar
         filters={filters}
-        onChange={setFilters}
+        onChange={changeFilters}
         campaignsList={campaignsList}
         allTags={allTags}
         contributorsList={contributorsList}
-        showSource={false}
-        searchPlaceholder="Search by name or Campaign..."
+        sourcePlacement="panel"
+        defaultSource={isRefs ? '' : 'troxa_generated'}
+        showMediaType={!isRefs}
+        searchPlaceholder={isRefs ? 'Search references...' : 'Search by name or Campaign...'}
       />
+
+      {/* Bulk actions for the reference library — a floating bar just above
+          the dock, portaled to the theme root so it tracks light/dark. */}
+      {createPortal(
+        <AnimatePresence>
+          {isRefs && selectMode && (
+            <motion.div
+              initial={{ opacity: 0, y: 24, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: 24, x: '-50%' }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+              className="fixed left-1/2 z-60 flex items-center gap-1 p-1.5 pl-2 rounded-2xl border border-(--border-default) max-w-[calc(100vw-1.5rem)]"
+              style={{
+                bottom: 'calc(6.25rem + env(safe-area-inset-bottom))',
+                background: 'var(--dropdown-bg)',
+                backdropFilter: 'blur(18px)',
+                WebkitBackdropFilter: 'blur(18px)',
+                boxShadow: '0 20px 50px var(--shadow-far), 0 4px 14px var(--shadow-close)',
+              }}
+            >
+              <span className="min-w-7 h-7 px-2 rounded-lg bg-(--accent) text-white text-xs font-black flex items-center justify-center tabular-nums">
+                {selectedIds.size}
+              </span>
+              <span className="text-xs font-bold text-(--text-primary) pl-1 pr-2 whitespace-nowrap">selected</span>
+              <button type="button" onClick={toggleSelectAll}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-colors whitespace-nowrap">
+                {allLoadedSelected ? 'Deselect all' : 'Select all'}
+              </button>
+              <span className="w-px h-5 bg-(--border-default) mx-1" />
+              <button type="button" onClick={removeSelectedReferences} disabled={!selectedIds.size || bulkRemoving}
+                className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 text-red-400 hover:bg-red-500/12 disabled:opacity-40 disabled:hover:bg-transparent transition-colors whitespace-nowrap">
+                {bulkRemoving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageMinus className="w-3.5 h-3.5" />}
+                Remove from references
+              </button>
+              <button type="button" onClick={exitSelectMode} aria-label="Cancel selection" title="Cancel (Esc)"
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-hover) transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        getPortalRoot()
+      )}
 
       {/* ── Creatives ── */}
       {loading ? (
-        <CreativeGridSkeleton count={8} />
+        <div className={view === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-4"}>
+          {Array.from({ length: 8 }).map((_, i) => <CreativeCardSkeleton key={i} view={view} simple={isRefs} />)}
+        </div>
       ) : creatives.length === 0 && pendingCards.length === 0 ? (
         <div style={GLASS_STYLE} className="p-16 text-center rounded-[2.5rem] space-y-4">
           <ImageIcon className="w-12 h-12 text-gray-600 mx-auto" />
-          <p className="text-sm font-bold text-gray-300">No creatives found</p>
+          <p className="text-sm font-bold text-gray-300">{isRefs ? 'No reference images found' : 'No creatives found'}</p>
+          {isRefs && (
+            <p className="text-xs text-gray-500">Upload one here, or open the gallery and use “Make reference” on a creative.</p>
+          )}
         </div>
       ) : (
         <div className={view === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "space-y-4"}>
@@ -729,6 +879,24 @@ export default function GeneratedCreatives() {
           ))}
           {/* Real creatives */}
           {creatives.map((creative, i) => {
+            if (isRefs) {
+              return (
+                <ReferenceCard
+                  key={creative.id}
+                  creative={creative}
+                  index={i}
+                  onOpen={() => openLightboxFor(creative)}
+                  onRename={handleRenameCreative}
+                  allTags={allTags}
+                  onTagsChange={handleTagsChange}
+                  onTagCreated={(tag) => setAllTags(prev => [...prev, tag])}
+                  onRemove={isEditor ? toggleReference : null}
+                  selectMode={selectMode}
+                  selected={selectedIds.has(creative.id)}
+                  onToggleSelect={toggleSelected}
+                />
+              );
+            }
             const CardComponent = creative.media_type === 'Video' ? VideoCreativeCard : PhotoCreativeCard;
             return (
               <CardComponent
@@ -750,15 +918,16 @@ export default function GeneratedCreatives() {
               />
             );
           })}
+          {/* Next page on its way — placeholder cards continue the grid
+              instead of a spinner under it. */}
+          {loadingMore && Array.from({ length: 4 }).map((_, i) => (
+            <CreativeCardSkeleton key={`more-${i}`} view={view} simple={isRefs} />
+          ))}
         </div>
       )}
 
       {/* Infinite scroll sentinel — fetches the next page when scrolled into view */}
-      {hasMore && (
-        <div ref={sentinelRef} className="flex items-center justify-center py-8">
-          <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-        </div>
-      )}
+      {hasMore && <div ref={sentinelRef} className="h-px" aria-hidden />}
 
       {/* Lightbox — portaled to the theme root (same pattern as
           CreativeFilterBar/TagPicker) so this "fixed" overlay is fixed to

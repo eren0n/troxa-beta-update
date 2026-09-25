@@ -76,16 +76,16 @@ export default function VideoCreativeCard({
         )}
 
         {isRendering && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center media-scrim pointer-events-none">
             <div className="flex flex-col items-center gap-2">
               <div className="w-8 h-8 border-2 border-(--accent) border-t-transparent rounded-full animate-spin" />
-              <span className="text-[10px] text-(--accent-hover) font-black uppercase tracking-wider">Rendering…</span>
+              <span className="media-chip">Rendering…</span>
             </div>
           </div>
         )}
         {isError && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 pointer-events-none">
-            <span className="text-xs text-red-400 font-bold">Render failed</span>
+          <div className="absolute inset-0 flex items-center justify-center media-scrim pointer-events-none">
+            <span className="media-chip" style={{ '--chip-tint': '#f87171' }}><span className="media-chip-dot" /> Render failed</span>
           </div>
         )}
 
@@ -96,18 +96,18 @@ export default function VideoCreativeCard({
             through a parent's opacity makes it snap in instead of
             fading smoothly. */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="px-4 py-2 bg-white/20 backdrop-blur-sm rounded-xl border border-white/20 text-white text-xs font-bold flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="media-chip px-4! py-2! text-[11px]! tracking-wide! normal-case! rounded-xl! gap-2! opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <Maximize2 className="w-3.5 h-3.5" /> View Fullscreen
           </div>
         </div>
 
         <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest backdrop-blur-md border bg-violet-500/15 text-violet-400 border-violet-500/20 flex items-center gap-1 w-fit">
+          <span className="media-chip" style={{ '--chip-tint': '#c4b5fd' }}>
             <Video className="w-2.5 h-2.5" /> Video
           </span>
           {creative.source === 'uploaded' && (
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest backdrop-blur-md border bg-amber-500/15 text-amber-400 border-amber-500/20">
-              Uploaded
+            <span className="media-chip" style={{ '--chip-tint': '#fbbf24' }}>
+              <span className="media-chip-dot" /> Uploaded
             </span>
           )}
         </div>
@@ -140,7 +140,7 @@ export default function VideoCreativeCard({
               </div>
             )}
             {creative.aspect_ratio && (
-              <span className="inline-block mt-1 px-1.5 py-0.5 bg-white/5 border border-white/8 rounded text-[9px] font-black text-slate-400 uppercase tracking-wider">
+              <span className="inline-block mt-1 px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[9px] font-black text-slate-400 uppercase tracking-wider">
                 {creative.aspect_ratio}
               </span>
             )}
@@ -154,13 +154,13 @@ export default function VideoCreativeCard({
               onTagCreated={onTagCreated}
             />
             <button onClick={(e) => { e.stopPropagation(); onComment(creative); }}
-              className="relative p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-500 hover:text-white transition-colors"
+              className="relative p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-(--text-primary) border border-white/10 transition-colors"
               title="Comment">
               <MessageSquare className="w-3.5 h-3.5" />
               {creative.feedback_text && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-blue-500 rounded-full" />}
             </button>
             <button onClick={(e) => { e.stopPropagation(); onDelete(creative.id); }}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/15 text-slate-500 hover:text-red-400 transition-colors"
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/15 border border-white/10 hover:border-red-500/30 text-gray-400 hover:text-red-400 transition-colors"
               title="Delete">
               <X className="w-3.5 h-3.5" />
             </button>
@@ -195,7 +195,7 @@ export default function VideoCreativeCard({
                     ? <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                     : half
                     ? <StarHalf className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    : <Star className="w-3.5 h-3.5 text-slate-700" />}
+                    : <Star className="w-3.5 h-3.5 text-(--star-empty)" />}
                 </button>
               );
             })}

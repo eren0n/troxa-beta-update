@@ -255,6 +255,8 @@ export default function GenerateCreatives() {
       <div style={GLASS_STYLE} className="rounded-2xl p-5">
         {s.mode === 'custom' && (
           <>
+            {/* Credit summary hidden for now to save space — the low-balance
+                warning below and the button's disabled state still enforce it.
             <div className="flex items-center justify-between mb-4 p-3 bg-blue-500/4 border border-blue-500/12 rounded-xl">
               <div className="flex items-center gap-2">
                 <Info className="w-3.5 h-3.5 text-blue-400" />
@@ -262,12 +264,14 @@ export default function GenerateCreatives() {
               </div>
               <span className="text-sm font-black text-white">{totalNeeded}</span>
             </div>
+            */}
             {s.selectedStatics.length === 0 && (
               <div className="mb-3 flex items-center gap-2 text-[10px] text-slate-600">
                 <Wand2 className="w-3 h-3 text-blue-500/60 shrink-0" />
                 <span>No reference selected — AI will generate a betting ad autonomously</span>
               </div>
             )}
+            {/* Credit breakdown hidden for now, see above.
             <div className="flex items-center justify-between text-[10px] text-slate-700 mb-4">
               <span>{Math.max(s.selectedStatics.length, 1)} ref{s.selectedStatics.length !== 1 ? 's' : ''}</span>
               <span>×</span>
@@ -276,6 +280,7 @@ export default function GenerateCreatives() {
               <span>=</span>
               <span className="font-bold text-slate-500">{totalNeeded} total</span>
             </div>
+            */}
           </>
         )}
 

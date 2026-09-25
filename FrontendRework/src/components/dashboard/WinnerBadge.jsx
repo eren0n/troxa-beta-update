@@ -43,11 +43,14 @@ export default function WinnerBadge({ creativeId, currentTags = [], allTags = []
       onClick={toggle}
       disabled={saving}
       title={isWinner ? 'Winner — click to remove' : 'Mark as winner'}
-      className={`absolute top-3 right-3 z-10 p-1.5 rounded-full backdrop-blur-md border transition-all ${
+      // Sits on the image, so it uses the mode-independent media styles —
+      // bg-black/40 + text-white were remapped to white-on-white in light modes.
+      className={`absolute top-3 right-3 z-10 p-1.5 rounded-full transition-all ${
         isWinner
-          ? 'bg-amber-500 border-amber-300 text-white shadow-lg shadow-amber-500/40'
-          : 'bg-black/40 border-white/15 text-white/50 opacity-0 group-hover:opacity-100 hover:text-amber-400 hover:border-amber-400/60'
+          ? 'border shadow-lg shadow-amber-500/40'
+          : 'media-btn opacity-0 group-hover:opacity-100 hover:text-amber-300! hover:border-amber-300/60!'
       } ${saving ? 'opacity-70' : ''}`}
+      style={isWinner ? { background: '#f59e0b', borderColor: '#fcd34d', color: '#fff' } : undefined}
     >
       <Trophy className={`w-3.5 h-3.5 ${isWinner ? 'fill-current' : ''}`} />
     </button>

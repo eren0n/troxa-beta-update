@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Zap, Play, Pause, Trash2, Plus, ArrowLeft, Check, X,
@@ -14,20 +14,11 @@ import LockedFeature from '../../components/dashboard/LockedFeature';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { CreativeImg } from '../../components/ui/CreativeImg';
 import GenerationSettingsPanel from '../../components/dashboard/GenerationSettingsPanel';
+import ScheduleEditor, { TIMEZONES } from '../../components/dashboard/ScheduleEditor';
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const TIMEZONES = [
-  { label: 'Istanbul (TRT)',   value: 'Europe/Istanbul' },
-  { label: 'New York (ET)',    value: 'America/New_York' },
-  { label: 'Chicago (CT)',     value: 'America/Chicago' },
-  { label: 'Denver (MT)',      value: 'America/Denver' },
-  { label: 'Los Angeles (PT)', value: 'America/Los_Angeles' },
-  { label: 'Anchorage (AKT)', value: 'America/Anchorage' },
-  { label: 'Honolulu (HST)',   value: 'Pacific/Honolulu' },
-];
 
 const statusStyles = {
   active: { pill: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400', dot: 'bg-emerald-500', label: 'Active' },
@@ -66,6 +57,9 @@ function StatCard({ icon: Icon, label, value, color = 'blue' }) {
   );
 }
 
+const NAME_MAX = 60;
+const NAME_IDEAS = ['Daily promo drop', 'Weekend push', 'Monday fresh statics', 'Matchday creatives'];
+
 // ─── Pipeline Builder — full-page view, not a modal ───────────────────────────
 // Its generation settings (mode, model, ratios, campaign, Trend Scout,
 // Campaign Intel, reference photos, character, logo, fingerprint blend,
@@ -82,7 +76,10 @@ function PipelineBuilderView({ onClose, onCreated, editTarget = null }) {
   const [formName, setFormName] = useState(() => editTarget?.name || '');
   const [formTrigger, setFormTrigger] = useState(() => editTarget?.trigger_type || 'scheduled');
   const [formScheduleTime, setFormScheduleTime] = useState(() => editTarget?.schedule_time ? String(editTarget.schedule_time).slice(0, 5) : '08:00');
-  const [formScheduleDays, setFormScheduleDays] = useState(() => editTarget?.schedule_days || [0]);
+  // An empty day list on a saved pipeline has always meant "daily".
+  const [formScheduleDays, setFormScheduleDays] = useState(() => (
+    editTarget ? (editTarget.schedule_days?.length ? editTarget.schedule_days : [0, 1, 2, 3, 4, 5, 6]) : [0]
+  ));
   const [formScheduleTimezone, setFormScheduleTimezone] = useState(() => {
     if (editTarget?.schedule_timezone) return editTarget.schedule_timezone;
     const browser = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -92,7 +89,8 @@ function PipelineBuilderView({ onClose, onCreated, editTarget = null }) {
   const [saveError, setSaveError] = useState(null);
 
   const s = useGenerationSettings(editTarget || {});
-  const toggleDay = (day) => setFormScheduleDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
+  const nameRef = useRef(null);
+  useEffect(() => { if (!isEditing) nameRef.current?.focus(); }, [isEditing]);
 
   const handleSave = async () => {
     if (!formName.trim()) return;
@@ -119,7 +117,7 @@ function PipelineBuilderView({ onClose, onCreated, editTarget = null }) {
     setCreating(false);
   };
 
-  const InputCls = "w-full bg-[rgba(12,15,26,0.80)] border border-white/8 focus:border-blue-500 rounded-xl py-2.5 px-3.5 text-sm text-white outline-none transition-all placeholder:text-slate-700";
+  const canSave = !!formName.trim() && !creating && isEditor;
   const creditBalance = credits?.balance ?? 0;
 
   const footer = (
@@ -139,9 +137,9 @@ function PipelineBuilderView({ onClose, onCreated, editTarget = null }) {
       <div className="flex items-center gap-2 text-[10px] text-slate-700">
         <AlertCircle className="w-3 h-3 shrink-0" /> {isEditing ? 'Changes apply to future runs.' : 'Activates immediately after creation.'}
       </div>
-      <motion.button onClick={handleSave} disabled={!formName.trim() || creating || !isEditor}
-        whileHover={formName.trim() && !creating && isEditor ? { scale: 1.01 } : {}}
-        whileTap={formName.trim() && !creating && isEditor ? { scale: 0.99 } : {}}
+      <motion.button onClick={handleSave} disabled={!canSave}
+        whileHover={canSave ? { scale: 1.01 } : {}}
+        whileTap={canSave ? { scale: 0.99 } : {}}
         className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800/50 disabled:cursor-not-allowed text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2">
         {creating && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
         {isEditing ? 'Save Changes' : 'Create Pipeline'}
@@ -155,53 +153,98 @@ function PipelineBuilderView({ onClose, onCreated, editTarget = null }) {
       className="fixed inset-0 z-50 overflow-y-auto"
       style={{ background: 'var(--bg-page)' }}
     >
-      {/* Header — name, trigger, schedule. Not the generation settings
-          themselves (shared with Generate below), just what makes this a
-          recurring pipeline rather than a one-off. */}
-      <div className="sticky top-0 z-10 border-b border-white/5 backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--bg-page) 92%, transparent)' }}>
-        <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-4 flex flex-col lg:flex-row lg:items-center gap-4">
-          <button onClick={onClose} className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors font-bold text-sm shrink-0">
-            <ArrowLeft className="w-4 h-4" /> Back
+      {/* Header — back, the pipeline's name, and save. */}
+      <div className="sticky top-0 z-10 border-b border-(--border-subtle) backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--bg-page) 88%, transparent)' }}>
+        <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-3.5 flex items-center gap-3 md:gap-5">
+          <button onClick={onClose} aria-label="Back to Automation"
+            className="w-10 h-10 rounded-xl border border-(--border-default) flex items-center justify-center text-(--text-muted) hover:text-(--text-primary) hover:border-(--border-strong) transition-colors shrink-0">
+            <ArrowLeft className="w-4 h-4" />
           </button>
 
-          <input type="text" value={formName} onChange={e => setFormName(e.target.value)}
-            placeholder="Pipeline name — e.g. NFL Sunday Push"
-            className="flex-1 min-w-0 bg-transparent border-none text-lg font-black text-white outline-none placeholder:text-slate-700" />
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {[['scheduled', 'Scheduled'], ['manual', 'Manual']].map(([val, lbl]) => (
-              <button key={val} onClick={() => setFormTrigger(val)}
-                className={`py-2 px-3 rounded-xl border text-xs font-black transition-all ${formTrigger === val ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/3 border-white/6 text-slate-500 hover:text-white'}`}>
-                {lbl}
-              </button>
-            ))}
-
-            {formTrigger === 'scheduled' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="flex flex-wrap items-center gap-2">
-                <input type="time" value={formScheduleTime} onChange={e => setFormScheduleTime(e.target.value)} className={InputCls + ' w-auto py-2'} />
-                <div className="relative">
-                  <select value={formScheduleTimezone} onChange={e => setFormScheduleTimezone(e.target.value)} className={InputCls + ' min-w-44 py-2 pr-8 appearance-none cursor-pointer'}>
-                    {TIMEZONES.map(tz => <option key={tz.value} value={tz.value}>{tz.label}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />
-                </div>
-                <div className="flex gap-1">
-                  {DAY_LABELS.map((day, idx) => (
-                    <button key={idx} onClick={() => toggleDay(idx)}
-                      className={`px-2 py-2 rounded-lg text-[10px] font-black border transition-all ${formScheduleDays.includes(idx) ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white/3 border-white/6 text-slate-500 hover:text-white'}`}>
-                      {day}
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+          {/* Where you are + the name as it'll read in the list */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-(--text-muted) flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+              <Zap className="w-3 h-3 text-(--accent) shrink-0" /> <span className="truncate">Automation · {isEditing ? 'Edit pipeline' : 'New pipeline'}</span>
+            </p>
+            <p className={`text-sm font-black truncate ${formName.trim() ? 'text-(--text-primary)' : 'text-(--text-faint)'}`}>
+              {formName.trim() || 'Untitled pipeline'}
+            </p>
           </div>
+
+          <button onClick={onClose}
+            className="hidden sm:block px-4 py-2.5 rounded-xl text-xs font-bold text-(--text-muted) hover:text-(--text-primary) transition-colors shrink-0">
+            Cancel
+          </button>
+          <motion.button onClick={handleSave} disabled={!canSave}
+            whileTap={canSave ? { scale: 0.97 } : {}}
+            title={!formName.trim() ? 'Give the pipeline a name first' : undefined}
+            className="px-5 py-2.5 bg-(--accent) hover:bg-(--accent-hover) disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition-all shadow-lg shadow-accent-glow flex items-center gap-2 shrink-0">
+            {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {isEditing ? 'Save' : 'Create'}
+          </motion.button>
         </div>
       </div>
 
-      <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 pb-16">
-        <GenerationSettingsPanel settings={s} footer={footer} />
+      <div className="max-w-[1600px] mx-auto px-4 md:px-8 py-6 pb-16 space-y-8">
+        {/* Name */}
+        <div style={GLASS_STYLE} className="relative rounded-2xl overflow-hidden p-5 md:p-6 flex items-start gap-4 md:gap-5">
+          <div className="absolute -top-24 -left-16 w-72 h-72 rounded-full bg-(--accent) opacity-[0.08] blur-3xl pointer-events-none" />
+          <div className="relative hidden sm:flex w-12 h-12 md:w-14 md:h-14 rounded-2xl items-center justify-center shrink-0 shadow-lg shadow-accent-glow"
+            style={{ background: 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #8b5cf6))' }}>
+            <Zap className="w-6 h-6 text-white fill-white/20" />
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <label htmlFor="pipeline-name" className="text-[10px] font-black uppercase tracking-widest text-(--text-muted)">
+              Pipeline name
+            </label>
+            <div className="mt-1 flex items-center gap-3 border-b-2 border-(--border-default) focus-within:border-(--accent) transition-colors">
+              <input id="pipeline-name" ref={nameRef} type="text" value={formName} maxLength={NAME_MAX}
+                onChange={e => setFormName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave(); }}
+                placeholder="e.g. Weekend promo drop"
+                className="flex-1 min-w-0 bg-transparent! border-none py-2 text-2xl md:text-3xl font-black tracking-tight text-(--text-primary) outline-none placeholder:text-(--text-faint)" />
+              <span className={`text-[10px] font-bold tabular-nums shrink-0 transition-opacity ${formName.length > NAME_MAX - 15 ? 'opacity-100 text-(--text-muted)' : 'opacity-0'}`}>
+                {formName.length}/{NAME_MAX}
+              </span>
+            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              {formName.trim() ? (
+                <motion.p key="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="mt-3 text-xs text-(--text-muted)">
+                  This is how it shows in your Automation list. Press Enter to {isEditing ? 'save' : 'create'}.
+                </motion.p>
+              ) : (
+                <motion.div key="ideas" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="mt-3 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] text-(--text-muted) mr-1">Try</span>
+                  {NAME_IDEAS.map((idea) => (
+                    <button key={idea} type="button" onClick={() => { setFormName(idea); nameRef.current?.focus(); }}
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold border border-(--border-default) text-(--text-secondary) hover:text-(--accent) hover:border-(--accent) hover:bg-(--accent-muted) transition-colors">
+                      {idea}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <ScheduleEditor
+          trigger={formTrigger} onTriggerChange={setFormTrigger}
+          days={formScheduleDays} onDaysChange={setFormScheduleDays}
+          time={formScheduleTime} onTimeChange={setFormScheduleTime}
+          timezone={formScheduleTimezone} onTimezoneChange={setFormScheduleTimezone}
+        />
+
+        {/* Generation settings — the same component as the Generate tab */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Layers className="w-4 h-4 text-(--accent)" />
+            <h2 className="text-sm font-black text-(--text-primary)">What should it make?</h2>
+            <span className="text-[11px] text-(--text-muted)">· same settings as the Generate tab</span>
+          </div>
+          <GenerationSettingsPanel settings={s} footer={footer} />
+        </section>
       </div>
     </motion.div>
   );

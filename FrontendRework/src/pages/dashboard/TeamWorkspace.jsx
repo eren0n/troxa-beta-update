@@ -38,7 +38,7 @@ function MemberRow({ member, i, onRemove, canRemove }) {
       <td className="px-6 py-4">
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white shrink-0 shadow-sm"
+            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs text-white on-fill shrink-0 shadow-sm"
             style={{ background: 'linear-gradient(to bottom right, var(--accent), var(--accent-hover))', boxShadow: '0 1px 2px color-mix(in srgb, var(--accent) 20%, transparent)' }}
           >
             {initials}
