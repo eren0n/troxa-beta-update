@@ -991,7 +991,21 @@ def _run_creative_director(campaign, insight):
         else '"PLAY NOW", "SPIN FREE", "CLAIM BONUS"'
     )
 
+    # The offers this brand actually runs. Without them Agent 2 invents its own
+    # — a campaign with no promos in its Brand Kit produced a brief promising
+    # "200% BONUS UNLOCKED" — and the brief goes straight into the generation
+    # prompt as instructions, past the autonomous path's ban on inventing them.
+    from apps.creatives.services import _load_promo_texts
+    promos = _load_promo_texts(campaign.workspace_id)
+    promo_texts = (
+        '\n'.join(f'- "{p}"' for p in promos)
+        if promos
+        else '(none — this brand has no promo artwork in its Brand Kit, so no '
+             'brief may mention a bonus, percentage, coin amount or free spins)'
+    )
+
     user_prompt = CREATIVE_DIRECTOR_USER_PROMPT_TEMPLATE.format(
+        promo_texts          =promo_texts,
         target_audience      =campaign.target_audience or "general",
         target_region        =campaign.target_region   or "global",
         objective            =campaign.get_objective_display() or "general",

@@ -489,6 +489,11 @@ QUALITY REQUIREMENTS:
      pipeline adds the workspace's own disclaimer at the bottom of every
      creative, so anything written here is rendered a second time and the image
      comes back with two.
+   - NEVER invent an offer. Bonus amounts, percentages, coin or spin counts and
+     deposit terms may only be taken verbatim from BRAND OFFERS above. If that
+     list is empty the brief gets a generic call to action and no numbers at
+     all — a creative promising something the brand does not run is worse than
+     a plain one.
 
 → Honor negative patterns: do not include any element from negative_patterns in any brief.
 
@@ -527,6 +532,11 @@ Human brief: {campaign_brief}
 
 BRAND CTA EXAMPLES (use these exact texts — do NOT write the word "CTA" as button text):
 {cta_examples}
+
+BRAND OFFERS — the promotions this brand actually runs, read verbatim off its own
+promo artwork. Any bonus, percentage, coin amount or free-spin count in a brief
+must come from this list, word for word:
+{promo_texts}
 
 MARKET INTELLIGENCE:
 {market_research_json}
