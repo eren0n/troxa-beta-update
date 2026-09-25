@@ -81,13 +81,21 @@ class MemberSerializer(serializers.ModelSerializer):
     member_id = serializers.IntegerField(source='user.id', read_only=True)
     name = serializers.SerializerMethodField()
     email = serializers.CharField(source='user.email', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkspaceMember
-        fields = ('id', 'member_id', 'name', 'email', 'role', 'joined_at')
+        fields = ('id', 'member_id', 'name', 'email', 'avatar_url', 'role', 'joined_at')
 
     def get_name(self, obj):
         return obj.user.get_full_name() or obj.user.email.split('@')[0]
+
+    def get_avatar_url(self, obj):
+        avatar = obj.user.avatar
+        if not (avatar and avatar.name):
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(avatar.url) if request else avatar.url
 
 
 class InviteSerializer(serializers.ModelSerializer):

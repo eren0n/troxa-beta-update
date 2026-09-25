@@ -50,7 +50,7 @@ class MembersView(APIView):
     def get(self, request):
         ws = get_workspace(request)
         members = ws.memberships.select_related('user').all()
-        return Response(MemberSerializer(members, many=True).data)
+        return Response(MemberSerializer(members, many=True, context={'request': request}).data)
 
 
 class MemberDetailView(APIView):
@@ -74,7 +74,7 @@ class MemberDetailView(APIView):
                 return Response({'detail': "Cannot change the owner's role."}, status=403)
             m.role = role
             m.save(update_fields=['role'])
-        return Response(MemberSerializer(m).data)
+        return Response(MemberSerializer(m, context={'request': request}).data)
 
     def delete(self, request, pk):
         ws = get_workspace(request)

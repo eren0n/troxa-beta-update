@@ -408,8 +408,13 @@ class MeView(APIView):
             if field in data:
                 setattr(user, field, data[field])
 
-        if 'avatar' in request.FILES:
-            user.avatar = request.FILES['avatar']
+        # A new upload or an explicit remove both drop the old file from
+        # storage, so replaced avatars don't pile up under media/avatars/.
+        remove = str(data.get('remove_avatar', '')).lower() in ('1', 'true', 'yes')
+        if 'avatar' in request.FILES or remove:
+            if user.avatar:
+                user.avatar.delete(save=False)
+            user.avatar = request.FILES['avatar'] if 'avatar' in request.FILES else None
 
         user.save()
         return Response(UserSerializer(user, context={'request': request}).data)
@@ -548,7 +553,7 @@ class WorkspaceMembersView(APIView):
         except Workspace.DoesNotExist:
             return Response(status=404)
         members = ws.memberships.select_related('user').all()
-        return Response(MemberSerializer(members, many=True).data)
+        return Response(MemberSerializer(members, many=True, context={'request': request}).data)
 
 
 _ADMIN_ROLES = {'owner', 'admin'}
@@ -578,7 +583,7 @@ class WorkspaceMemberDetailView(APIView):
                 return Response({'detail': 'Cannot assign owner role via API.'}, status=403)
             m.role = role
             m.save(update_fields=['role'])
-        return Response(MemberSerializer(m).data)
+        return Response(MemberSerializer(m, context={'request': request}).data)
 
     def delete(self, request, pk, member_id):
         try:
