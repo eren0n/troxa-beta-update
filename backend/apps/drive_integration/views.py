@@ -118,7 +118,12 @@ class DriveOAuthCallbackView(APIView):
                 'access_token': data['access_token'],
                 'refresh_token': data['refresh_token'],
                 'token_expiry': expiry,
-                'generations_folder_id': '',
+                # A reconnect may be a different Google account, whose Drive
+                # doesn't contain the folder the old id points at — clear it so
+                # the Troxa.ai root is found or made again. This was
+                # generations_folder_id until 0003 replaced it with
+                # root_folder_id; the stale name made every new connection 500.
+                'root_folder_id': '',
             },
         )
 
