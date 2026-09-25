@@ -1,4 +1,5 @@
 import io
+import logging
 import os
 import fal_client
 import requests as http_requests
@@ -78,6 +79,9 @@ from .services import (
     _deduct_credits, _build_creative_name, _fetch_bytes,
     aspect_ratio_label_from_size, _subscribe_with_retry,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _check_credits(ws, num_images, model_name='Nano Banana 2'):
@@ -787,6 +791,42 @@ class CreativeImageProxyView(APIView):
             return HttpResponseRedirect(url)
 
 
+# What fal-ai/nano-banana-2/edit will accept as an aspect_ratio.
+_AI_EDIT_RATIOS = ('1:1', '4:5', '9:16', '16:9', '3:2', '2:3', '4:3', '3:4')
+
+
+def _keep_source_ratio(creative, image_url):
+    """
+    The ratio to ask for when the caller says "keep the current size".
+
+    'auto' does not mean "keep it": it hands the choice to the model, and
+    nano-banana reliably answers 928x1152 whatever it was given — which turns
+    a 9:16 story into roughly 4:5. Nothing downstream can undo that, so the
+    source is measured and its ratio named explicitly instead.
+
+    The stored aspect_ratio is only a fallback: it can be a label like '15:17'
+    that the model would reject, and on edited creatives it can be stale.
+    """
+    try:
+        with PILImage.open(io.BytesIO(_fetch_bytes(image_url))) as im:
+            width, height = im.size
+        if width and height:
+            ratio = width / height
+            return min(
+                _AI_EDIT_RATIOS,
+                key=lambda label: abs(ratio - _ratio_value(label)) / _ratio_value(label),
+            )
+    except Exception:
+        logger.warning('ai_edit.source_measure_failed creative=%s', creative.pk, exc_info=True)
+    stored = (creative.aspect_ratio or '').strip()
+    return stored if stored in _AI_EDIT_RATIOS else 'auto'
+
+
+def _ratio_value(label):
+    w, _, h = label.partition(':')
+    return int(w) / int(h)
+
+
 _AI_RATIO_MAP = {
     'Current Size': 'auto',
     '1:1 — Square': '1:1',
@@ -837,6 +877,11 @@ class AiEditView(APIView):
         image_url = (request.data.get('source_image_url') or '').strip() or creative.image_url
         if not image_url:
             return Response({'error': 'Creative has no image URL'}, status=400)
+
+        # "Keep the current size" has to be turned into an actual ratio before
+        # it reaches the model; see _keep_source_ratio.
+        if aspect_ratio == 'auto':
+            aspect_ratio = _keep_source_ratio(creative, image_url)
 
         os.environ['FAL_KEY'] = settings.FAL_KEY
         try:
