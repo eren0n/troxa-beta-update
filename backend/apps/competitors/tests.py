@@ -260,9 +260,13 @@ ANALYSIS = {
     'offer': {'type': 'deposit match', 'text': '100% deposit match'}, 'emotion': 'greed',
     'audience': 'US sports fans', 'visual': {'composition': 'centered headline', 'subjects': 'coins',
     'colors': ['green', 'gold'], 'text_overlay': 'DOUBLE IT', 'style': '3D render'},
-    'why_it_works': 'One clear number.', 'tags': ['offer', 'bold'],
+    'design': {'density': 'minimal', 'element_count': 4, 'typography': 'heavy condensed sans',
+    'effects': 'none — flat fills', 'background': 'solid black', 'recipe': 'flat card'},
+    'why_it_works': 'One clear number.', 'tags': ['offer', 'bold'], 'version': 2,
 }
-IDEA = {'theme': 'Double Down', 'concept': 'c', 'visual_direction': 'v', 'extra_prompt': 'e', 'insight': 'i'}
+IDEA = {'theme': 'Hot Ticket', 'concept': 'An oversized headline card.', 'visual_direction': 'v',
+        'extra_prompt': 'e', 'style_lock': 'Flat graphic design, solid purple, no glow', 'headline': 'CASHBACK',
+        'promo_line': 'Up to 5% of your losses', 'insight': 'We took the giant 100% hook.'}
 
 
 class AnalysisTests(TestCase):
@@ -351,6 +355,7 @@ class AdaptTests(TestCase):
         for key in ('id', 'theme', 'concept', 'visual_direction', 'extra_prompt', 'insight'):
             self.assertIn(key, idea)
         self.assertEqual(idea['source']['competitor_ad_id'], self.ad.pk)
+        self.assertEqual((idea['headline'], idea['style_lock']), ('CASHBACK', IDEA['style_lock']))
 
     def test_only_our_offers_reach_the_model(self):
         _, text = self.adapt()
@@ -360,7 +365,7 @@ class AdaptTests(TestCase):
 
     def test_with_no_offers_of_ours_the_model_is_told_to_make_none(self):
         _, text = self.adapt(offers=())
-        self.assertIn('make no specific offer', text.call_args.args[1])
+        self.assertIn('leave headline and promo_line empty', text.call_args_list[0].args[1])
 
     def test_an_unanalysed_ad_is_analysed_first(self):
         CompetitorAd.objects.filter(pk=self.ad.pk).update(analysis={}, analysis_status='')
@@ -396,3 +401,111 @@ class AdaptTests(TestCase):
             ad_archive_id='t', analysis=ANALYSIS, analysis_status='done')
         resp, _ = self.adapt(ad=theirs)
         self.assertEqual(resp.status_code, 404)
+
+
+class CopyGuardTests(TestCase):
+    """The idea's copy is ours; the competitor's offer, figures and words never carry over."""
+    OFFERS = ['3 SUPER HOT CHILLIES | HOLD AND WIN', 'JACKPOT WIN', 'GC 1200000']
+
+    def setUp(self):
+        owner = User.objects.create_user(username='cg', email='cg@x.com', password='x')
+        ws = Workspace.objects.create(name='Spinpals', owner=owner)
+        c = Competitor.objects.create(workspace=ws, page_id=PAGE, page_name='Topdog Games')
+        self.ad = CompetitorAd.objects.create(
+            competitor=c, ad_archive_id='1', title='Play for Cash', analysis={
+                **ANALYSIS, 'offer': {'type': 'deposit match', 'text': '100% DEPOSIT $10 | GET $20!'},
+                'visual': {'text_overlay': '100% DEPOSIT $10 | GET $20! CLAIM'}}, analysis_status='done')
+
+    def idea(self, **over):
+        from .analysis import AdaptedIdea
+        clean = {'theme': 'Giant Chilli Card', 'concept': 'An oversized headline fills a flat card.',
+                 'visual_direction': 'Solid purple, gold condensed type, emerald ticket, one button.',
+                 'extra_prompt': 'Flat poster.', 'style_lock': 'Flat graphic design, no glow, no 3D',
+                 'headline': '3 SUPER HOT CHILLIES', 'promo_line': 'HOLD AND WIN', 'insight': 'i'}
+        return AdaptedIdea(**{**clean, **over})
+
+    def check(self, idea, offers=None):
+        from .analysis import check_idea
+        return check_idea(idea, self.ad, self.OFFERS if offers is None else offers)
+
+    def test_a_clean_idea_passes(self):
+        self.assertEqual(self.check(self.idea()), [])
+        self.assertEqual(self.check(self.idea(promo_line='GC 1200000')), [])
+
+    def test_the_competitors_figures_are_caught_anywhere(self):
+        self.assertTrue(self.check(self.idea(headline='100% MATCH')))
+        self.assertTrue(self.check(self.idea(extra_prompt='A gold "$20" ticket.')))
+
+    def test_offers_we_do_not_run_are_caught(self):
+        self.assertTrue(self.check(self.idea(promo_line='Double Your First Deposit Today')))
+        self.assertTrue(self.check(self.idea(concept='Our welcome bonus on a flat card.')))
+
+    def test_copy_must_be_one_of_our_offers(self):
+        self.assertTrue(self.check(self.idea(headline='SPIN TO WIN BIG')))
+
+    def test_design_language_is_not_mistaken_for_an_offer(self):
+        idea = self.idea(style_lock='Flat design to match the palette, 3 elements, reference layout')
+        self.assertEqual(self.check(idea), [])
+
+    def test_with_no_offers_there_is_no_copy(self):
+        self.assertTrue(self.check(self.idea(), offers=[]))
+        self.assertEqual(self.check(self.idea(headline='', promo_line=''), offers=[]), [])
+
+    def adapt(self, *answers):
+        from .analysis import adapt_ad
+        with mock.patch('apps.creatives.services._load_promo_texts', return_value=self.OFFERS), \
+             mock.patch('apps.fingerprint.services._call_text_api',
+                        side_effect=[json.dumps(a) for a in answers]) as text:
+            try:
+                return adapt_ad(self.ad, self.ad.competitor.workspace), text
+            except RuntimeError as exc:
+                return exc, text
+
+    def test_a_borrowing_answer_is_rewritten_once(self):
+        bad = {**self.idea(headline='100% MATCH').model_dump()}
+        good = self.idea().model_dump()
+        idea, text = self.adapt(bad, good)
+        self.assertEqual(idea['headline'], '3 SUPER HOT CHILLIES')
+        self.assertEqual(text.call_count, 2)
+        self.assertIn('100%', text.call_args.args[1])          # told what it got wrong
+
+    def test_it_gives_up_rather_than_ship_their_copy(self):
+        bad = self.idea(promo_line='Double Your First Deposit Today').model_dump()
+        result, _ = self.adapt(bad, bad)
+        self.assertIsInstance(result, RuntimeError)
+
+
+class PromptArchitectSeedTests(TestCase):
+    def setUp(self):
+        owner = User.objects.create_user(username='pa', email='pa@x.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=owner)
+
+    def build(self, seed):
+        from apps.fingerprint.services import build_master_prompt
+        with mock.patch('apps.fingerprint.services._call_architect_api', return_value='prompt') as call:
+            build_master_prompt(self.ws, seed)
+        return call.call_args.args[1]
+
+    def test_a_competitor_seed_carries_its_style_lock_and_exact_copy(self):
+        sent = self.build({'theme': 't', 'concept': 'c', 'style_lock': 'Flat, no glow',
+                           'headline': 'JACKPOT WIN', 'promo_line': ''})
+        self.assertIn('REFERENCE STYLE LOCK:\nFlat, no glow', sent)
+        self.assertIn('Headline: "JACKPOT WIN"', sent)
+
+    def test_other_seeds_are_unchanged(self):
+        sent = self.build({'theme': 't', 'concept': 'c'})
+        self.assertNotIn('STYLE LOCK', sent)
+        self.assertNotIn('EXACT ON-IMAGE COPY', sent)
+
+
+class StaleAnalysisTests(TestCase):
+    def test_reads_from_an_older_analysis_are_redone(self):
+        from .analysis import analyze_new_ads
+        owner = User.objects.create_user(username='st', email='st@x.com', password='x')
+        c = Competitor.objects.create(workspace=Workspace.objects.create(name='W', owner=owner), page_id=PAGE)
+        old = CompetitorAd.objects.create(competitor=c, ad_archive_id='old', analysis={'hook': 'h'},
+                                          analysis_status='done')
+        CompetitorAd.objects.create(competitor=c, ad_archive_id='new', analysis=ANALYSIS, analysis_status='done')
+        with mock.patch('apps.competitors.analysis.analyze_ad', return_value=True) as run:
+            analyze_new_ads(c)
+        self.assertEqual([call.args[0].pk for call in run.call_args_list], [old.pk])

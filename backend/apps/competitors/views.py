@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.views import get_workspace, require_editor
-from .analysis import adapt_ad, analyze_ad
+from .analysis import adapt_ad, analyze_ad, needs_analysis
 from .models import Competitor, CompetitorAd
 from .serializers import CompetitorAdSerializer, CompetitorSerializer
 from .services import MAX_COMPETITORS_PER_WORKSPACE, claim, parse_page_id, sync_in_background
@@ -183,7 +183,7 @@ class CompetitorAdAdaptView(APIView):
             return Response(status=404)
         if ad.analysis_status == 'skipped':
             return Response({'detail': 'Only image ads can be adapted for now.'}, status=400)
-        if ad.analysis_status != 'done' and not analyze_ad(ad):
+        if needs_analysis(ad) and not analyze_ad(ad):
             ad.refresh_from_db()
             if ad.analysis_status == 'skipped':
                 return Response({'detail': 'Only image ads can be adapted for now.'}, status=400)

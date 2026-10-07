@@ -1337,6 +1337,16 @@ def build_master_prompt(workspace, seed: dict, aspect_ratio: str = "1:1", use_fi
         disclaimer_text      = disclaimer_text,
     )
 
+    # Seeds adapted from a competitor ad carry the reference's design treatment
+    # and on-image copy taken from our own offers; both override the brand
+    # defaults above (see REFERENCE STYLE LOCK / EXACT COPY in the system prompt).
+    if seed.get('style_lock'):
+        user_prompt += f"\n\nREFERENCE STYLE LOCK:\n{seed['style_lock']}"
+    if 'headline' in seed or 'promo_line' in seed:
+        user_prompt += ('\n\nEXACT ON-IMAGE COPY:\n'
+                        f'Headline: "{seed.get("headline") or ""}"\n'
+                        f'Promo line: "{seed.get("promo_line") or ""}"')
+
     raw = _call_architect_api(PROMPT_ARCHITECT_SYSTEM_PROMPT, user_prompt)
     # Strip any accidental markdown fences or leading/trailing whitespace
     master = raw.strip().strip('`').strip()

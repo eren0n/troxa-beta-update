@@ -176,7 +176,11 @@ export default function GenerateCreatives() {
         try {
           const primaryRatio = s.ratios[0]?.split(' ')[0] || '1:1';
           const data = await fingerprintApi.buildPrompt(
-            { theme: idea.theme, concept: idea.concept, visual_direction: idea.visual_direction, extra_notes: idea.extra_prompt || '' },
+            {
+              theme: idea.theme, concept: idea.concept, visual_direction: idea.visual_direction, extra_notes: idea.extra_prompt || '',
+              // competitor ideas: the reference's design treatment and copy from our own offers
+              ...(idea.style_lock ? { style_lock: idea.style_lock, headline: idea.headline || '', promo_line: idea.promo_line || '' } : {}),
+            },
             primaryRatio,
             s.useFingerprint,
           );
