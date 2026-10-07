@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'apps.meta_integration',
     'apps.public_api',
     'apps.fingerprint',
+    'apps.competitors',
 ]
 
 MIDDLEWARE = [

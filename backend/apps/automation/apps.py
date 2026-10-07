@@ -39,6 +39,13 @@ def _loop():
             _poll_video_jobs()
         except Exception:
             pass
+        # Competitor ads ride the same loop: one due page per tick, claimed
+        # the same way so the workers never scrape the same page twice.
+        try:
+            from apps.competitors.services import sync_due_competitors
+            sync_due_competitors()
+        except Exception:
+            pass
         time.sleep(30)
 
 

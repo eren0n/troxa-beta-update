@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/slack/', include('apps.slack_integration.urls')),
     path('api/drive/', include('apps.drive_integration.urls')),
     path('api/meta/', include('apps.meta_integration.urls')),
+    path('api/competitors/', include('apps.competitors.urls')),
     path('api/mgmt/', include('apps.accounts.mgmt_urls')),
     path('api/data-lab/', include('apps.data_lab.urls')),
     path('api/v1/', include('apps.public_api.urls')),
