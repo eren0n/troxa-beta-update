@@ -22,6 +22,23 @@ class SlackInstallation(models.Model):
         return f'{self.team_name} ({self.team_id})'
 
 
+class SlackConnection(models.Model):
+    """
+    Which Slack team a Troxa workspace is connected to.
+
+    Recorded when the workspace installs the app (or runs /troxa setup). It
+    used to be inferred from the workspace's channels, so removing the last
+    channel silently disconnected Slack, and a fresh install did not connect
+    the workspace until someone ran /troxa setup in Slack.
+    """
+    workspace    = models.OneToOneField(Workspace, on_delete=models.CASCADE, related_name='slack_connection')
+    installation = models.ForeignKey(SlackInstallation, on_delete=models.CASCADE, related_name='connections')
+    connected_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.workspace.name} → {self.installation.team_name}'
+
+
 class SlackChannel(models.Model):
     """
     One workspace can have multiple channels, each receiving different content types.

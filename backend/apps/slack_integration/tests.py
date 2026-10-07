@@ -729,3 +729,82 @@ class SlackMessageSyncTests(TestCase):
         with mock.patch('apps.slack_integration.services._post') as api:
             sync_creative_rating(self.creative.id)
         api.assert_not_called()
+
+
+@override_settings(SLACK_SIGNING_SECRET=SECRET, SLACK_CLIENT_ID='cid', SLACK_CLIENT_SECRET='cs')
+class SlackConnectionTests(TestCase):
+    """
+    A workspace stays connected to Slack until it disconnects — removing its
+    last channel used to disconnect it, and a fresh install didn't connect it.
+    """
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.user = User.objects.create_user(username='sc', email='sc@x.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.user)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.user, role='owner')
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+        self.headers = {'HTTP_X_WORKSPACE_ID': str(self.ws.id)}
+
+    def status(self):
+        return self.api.get('/api/slack/status/', **self.headers).json()
+
+    def install(self, team='T1'):
+        from django.core.signing import Signer
+        state = Signer().sign(str(self.ws.id))
+        answer = mock.Mock()
+        answer.json.return_value = {'ok': True, 'access_token': 'xoxb-new',
+                                    'team': {'id': team, 'name': 'RMGS'}}
+        with mock.patch('apps.slack_integration.views.http_requests.post', return_value=answer):
+            return self.client.get('/api/slack/oauth/callback/', {'code': 'c', 'state': state})
+
+    def test_installing_connects_the_workspace_before_any_channel_exists(self):
+        self.install()
+        s = self.status()
+        self.assertTrue(s['connected'])
+        self.assertEqual((s['team_name'], s['channels']), ('RMGS', []))
+        resp = self.api.post('/api/slack/channels/', {'channel_id': 'C1', 'channel_name': 'ads'},
+                             format='json', **self.headers)
+        self.assertEqual(resp.status_code, 201)
+
+    def test_removing_the_last_channel_keeps_slack_connected(self):
+        self.install()
+        pk = self.api.post('/api/slack/channels/', {'channel_id': 'C1'}, format='json',
+                           **self.headers).json()['id']
+        self.api.delete(f'/api/slack/channels/{pk}/', **self.headers)
+        self.assertTrue(self.status()['connected'])
+        listing = mock.Mock()
+        listing.json.return_value = {'ok': True, 'channels': [{'id': 'C2', 'name': 'general'}]}
+        with mock.patch('apps.slack_integration.views.http_requests.get', return_value=listing):
+            resp = self.api.get('/api/slack/available-channels/', **self.headers)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['channels'][0]['id'], 'C2')
+
+    def test_disconnect_disconnects(self):
+        self.install()
+        self.api.post('/api/slack/channels/', {'channel_id': 'C1'}, format='json', **self.headers)
+        self.api.delete('/api/slack/disconnect/', **self.headers)
+        s = self.status()
+        self.assertFalse(s['connected'])
+        self.assertEqual(s['channels'], [])
+
+    def test_troxa_setup_connects_too(self):
+        from django.core.signing import Signer
+        SlackInstallation.objects.create(team_id='T1', team_name='RMGS', bot_token='xoxb-1')
+        body = f'team_id=T1&channel_id=C7&channel_name=ads&user_id=U1&text=setup {Signer().sign(str(self.ws.id))}'
+        self.client.post('/api/slack/commands/', data=body,
+                         content_type='application/x-www-form-urlencoded', **sign(body))
+        s = self.status()
+        self.assertTrue(s['connected'])
+        self.assertEqual([c['channel_id'] for c in s['channels']], ['C7'])
+
+    def test_workspaces_connected_before_this_change_stay_connected(self):
+        import importlib
+        from django.apps import apps as registry
+        from .models import SlackConnection
+        inst = SlackInstallation.objects.create(team_id='T1', bot_token='xoxb-1')
+        SlackChannel.objects.create(workspace=self.ws, installation=inst, channel_id='C1')
+        migration = importlib.import_module('apps.slack_integration.migrations.0005_workspace_connection')
+        migration.connect_from_channels(registry, None)
+        self.assertEqual(SlackConnection.objects.get(workspace=self.ws).installation, inst)

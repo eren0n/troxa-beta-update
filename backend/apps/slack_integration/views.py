@@ -20,7 +20,7 @@ from apps.accounts.views import get_workspace
 from django.core.exceptions import ValidationError
 
 from apps.creatives.rating import apply_rating, toggle_winner
-from .models import SlackInstallation, SlackChannel, SlackPostedMessage, ALL_CONTENT_TYPES
+from .models import SlackConnection, SlackInstallation, SlackChannel, SlackPostedMessage, ALL_CONTENT_TYPES
 from .services import (
     RATE_ACTION_ID, WINNER_ACTION_ID, refresh_rating_row,
     GEN_ACTIONS, GEN_BLOCK_BRIEF, GEN_BLOCK_CAMPAIGN, GEN_BLOCK_COUNT, GEN_BLOCK_PROMPT,
@@ -38,6 +38,16 @@ BOT_SCOPES      = 'chat:write,files:write,commands,channels:read'
 
 def _redirect_uri():
     return f'{settings.SITE_BASE_URL}/api/slack/oauth/callback/'
+
+
+def _connection(ws):
+    """The workspace's Slack connection, or None when it isn't connected."""
+    return SlackConnection.objects.select_related('installation').filter(workspace=ws).first()
+
+
+def _connect(workspace_id, installation):
+    SlackConnection.objects.update_or_create(workspace_id=workspace_id,
+                                             defaults={'installation': installation})
 
 
 def _channel_data(sc):
@@ -102,10 +112,16 @@ class SlackOAuthCallbackView(APIView):
         if not data.get('ok'):
             return redirect(f'{frontend_base}/dashboard/integrations?slack=error')
 
-        SlackInstallation.objects.update_or_create(
+        installation, _ = SlackInstallation.objects.update_or_create(
             team_id=data['team']['id'],
             defaults={'team_name': data['team']['name'], 'bot_token': data['access_token']},
         )
+        # The signed state names the workspace that started the install —
+        # connect it now, so channels can be added from the dashboard
+        # straight away instead of only after /troxa setup in Slack.
+        from apps.accounts.models import Workspace
+        if Workspace.objects.filter(id=workspace_id).exists():
+            _connect(workspace_id, installation)
         return redirect(
             f'{frontend_base}/dashboard/integrations?slack=installed&team={data["team"]["name"]}'
         )
@@ -176,6 +192,7 @@ def _handle_setup(request, workspace_key):
             'text': ':x: Invalid Troxa Key. Find your key in *Dashboard → Integrations → Slack*.',
         })
 
+    _connect(workspace.id, installation)
     sc, created = SlackChannel.objects.update_or_create(
         workspace=workspace,
         channel_id=channel_id,
@@ -269,14 +286,17 @@ class SlackStatusView(APIView):
             return Response(status=404)
 
         channels = ws.slack_channels.select_related('installation').all()
-        installation = channels.first().installation if channels.exists() else None
+        # Connected means installed for this workspace — not "has channels":
+        # removing the last channel no longer disconnects Slack.
+        connection = _connection(ws)
+        installation = connection.installation if connection else None
 
         # Issue a signed token instead of the raw workspace UUID so that
         # /troxa setup can verify the key was legitimately issued to a
         # workspace member (prevents IDOR via guessed/scraped UUIDs).
         signer = Signer()
         return Response({
-            'connected':      channels.exists(),
+            'connected':      connection is not None,
             'team_name':      installation.team_name if installation else None,
             'troxa_key':      signer.sign(str(ws.id)),
             'channels':       [_channel_data(sc) for sc in channels],
@@ -292,6 +312,7 @@ class SlackDisconnectView(APIView):
         if not ws:
             return Response(status=404)
         ws.slack_channels.all().delete()
+        SlackConnection.objects.filter(workspace=ws).delete()
         return Response({'detail': 'Disconnected.'})
 
 
@@ -311,11 +332,11 @@ class SlackChannelsView(APIView):
         Body: { channel_id, channel_name, label?, content_types? }
         """
         ws = get_workspace(request)
-        channels = ws.slack_channels.select_related('installation').all()
-        if not channels.exists():
+        connection = _connection(ws)
+        if not connection:
             return Response({'error': 'No Slack installation found. Connect Slack first.'}, status=400)
 
-        installation = channels.first().installation
+        installation = connection.installation
         channel_id   = request.data.get('channel_id', '').strip()
         if not channel_id:
             return Response({'error': 'channel_id required'}, status=400)
@@ -377,11 +398,11 @@ class SlackAvailableChannelsView(APIView):
 
     def get(self, request):
         ws = get_workspace(request)
-        channel = ws.slack_channels.select_related('installation').first()
-        if not channel:
+        connection = _connection(ws)
+        if not connection:
             return Response({'error': 'Slack not connected'}, status=400)
 
-        token  = channel.installation.bot_token
+        token  = connection.installation.bot_token
         cursor = request.query_params.get('cursor', '')
         result = []
 
