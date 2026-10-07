@@ -13,6 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Headless Chromium for the competitors app, which reads rivals' ads off the
+# public Meta Ad Library page (apps/competitors/scraper.py). --with-deps pulls
+# the system libraries Chromium needs on this slim image.
+RUN playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
+
 COPY backend/ .
 
 # Override gunicorn config for container (log to stdout, bind to 0.0.0.0).
