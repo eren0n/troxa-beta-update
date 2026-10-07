@@ -494,6 +494,18 @@ export const mgmtApi = {
   },
 };
 
+export const competitorsApi = {
+  list:   () => request('GET', '/competitors/'),
+  add:    (url) => request('POST', '/competitors/', { url }),
+  remove: (id) => request('DELETE', `/competitors/${id}/`),
+  sync:   (id) => request('POST', `/competitors/${id}/sync/`),
+  // filters: competitor, active, format, min_days, ordering, page, page_size
+  ads: (filters = {}) => {
+    const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== '' && v != null));
+    return request('GET', `/competitors/ads/?${qs}`);
+  },
+};
+
 export const fingerprintApi = {
   status:   () => cachedGet('/fingerprint/status/'),
   merge:    () => request('POST', '/fingerprint/merge/')

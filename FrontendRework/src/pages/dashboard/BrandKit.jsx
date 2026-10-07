@@ -14,6 +14,7 @@ import LockedFeature from '../../components/dashboard/LockedFeature';
 import { GLASS_STYLE } from '../../components/ui/GlassCard';
 import { Skeleton } from '../../components/ui/Skeleton';
 import GeneratedCreatives from './GeneratedCreatives';
+import CompetitorsTab from '../../components/dashboard/CompetitorsTab';
 
 function SectionHeader({ icon: Icon, iconColor, title, desc, action }) {
   return (
@@ -1084,6 +1085,7 @@ function BrandKitPage() {
     { id: 'identity',    label: 'Identity'    },
     { id: 'campaigns',   label: 'Campaigns'   },
     { id: 'compliance',  label: 'Compliance'  },
+    { id: 'competitors', label: 'Competitors' },
     { id: 'fingerprint', label: '✦ Fingerprint' },
   ];
 
@@ -1366,12 +1368,12 @@ function BrandKitPage() {
         {headerActions[activeTab]}
       </div>
 
-      <div className="flex items-center gap-1 p-1 bg-blue-500/10 border border-white/6 rounded-xl w-fit">
+      <div className="flex items-center gap-1 p-1 bg-blue-500/10 border border-white/6 rounded-xl w-fit max-w-full overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`relative px-5 py-2 rounded-lg text-sm font-black transition-all ${activeTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-slate-300'}`}
+            className={`relative shrink-0 whitespace-nowrap px-5 py-2 rounded-lg text-sm font-black transition-all ${activeTab === tab.id ? 'text-white' : 'text-slate-400 hover:text-slate-300'}`}
           >
             {activeTab === tab.id && (
               <motion.div layoutId="brandkit-tab" className="absolute inset-0 bg-blue-500/10 border border-blue-500/20 rounded-lg" />
@@ -2382,6 +2384,9 @@ function BrandKitPage() {
               )}
             </div>
           </motion.div>
+        )}
+        {activeTab === 'competitors' && (
+          <CompetitorsTab isEditor={isEditor} />
         )}
         {activeTab === 'fingerprint' && (
           <FingerprintTab />
