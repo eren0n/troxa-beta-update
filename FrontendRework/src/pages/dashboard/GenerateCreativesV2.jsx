@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Plus, Zap, X, Sparkles, Wand2, AlertTriangle, ArrowRight, Loader2, Lock, Brain, ChevronDown, Info } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGeneration } from '../../contexts/GenerationContext';
 import { brandKitApi, creativesApi, fingerprintApi } from '../../lib/api';
@@ -143,7 +143,9 @@ export default function GenerateCreatives() {
   const navigate = useNavigate();
   const { credits, refreshCredits, activeWorkspace, isEditor } = useAuth();
   const { activeJobs, setActiveJobs, clearJobs, allSettled } = useGeneration();
-  const s = useGenerationSettings();
+  const location = useLocation();
+  const competitorIdea = location.state?.competitorIdea;
+  const s = useGenerationSettings(competitorIdea ? { pinned_idea: competitorIdea } : {});
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState(null);
@@ -165,8 +167,10 @@ export default function GenerateCreatives() {
     setShowForm(false);
 
     let prebuiltMasterPrompt = null;
-    if (s.mode === 'auto' && s.activeTrendIdeaId && s.trendBrief?.ideas) {
-      const idea = s.trendBrief.ideas.find(i => i.id === s.activeTrendIdeaId);
+    if (s.mode === 'auto' && s.activeTrendIdeaId) {
+      const idea = s.pinnedIdea?.id === s.activeTrendIdeaId
+        ? s.pinnedIdea
+        : s.trendBrief?.ideas?.find(i => i.id === s.activeTrendIdeaId);
       if (idea) {
         setArchitectLoading(true);
         try {

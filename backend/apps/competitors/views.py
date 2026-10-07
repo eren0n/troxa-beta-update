@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from django.db.models import Count, DurationField, ExpressionWrapper, F, Q, Value
@@ -8,9 +9,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.views import get_workspace, require_editor
+from .analysis import adapt_ad, analyze_ad
 from .models import Competitor, CompetitorAd
 from .serializers import CompetitorAdSerializer, CompetitorSerializer
 from .services import MAX_COMPETITORS_PER_WORKSPACE, claim, parse_page_id, sync_in_background
+
+logger = logging.getLogger(__name__)
 
 # "Sync now" can't be pressed faster than this — each press opens a browser
 # against Meta, and a burst of them is the quickest way to get blocked.
@@ -154,3 +158,41 @@ class CompetitorAdListView(APIView):
             'has_more': page * size < total,
             'results': CompetitorAdSerializer(items, many=True).data,
         })
+
+
+class CompetitorAdAdaptView(APIView):
+    """
+    POST /api/competitors/ads/<pk>/adapt/
+
+    One idea for this workspace's brand from one competitor ad, shaped like a
+    Trend Scout idea ({id, theme, concept, visual_direction, extra_prompt,
+    insight, source}) so Generate can use it as-is. Synchronous, ~5-15 s;
+    longer when the ad still has to be analysed first.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        ws = get_workspace(request)
+        if not ws:
+            return Response(status=404)
+        if not require_editor(request.user, ws):
+            return Response({'detail': 'Your role cannot generate.'}, status=403)
+        ad = (CompetitorAd.objects.select_related('competitor')
+              .filter(pk=pk, competitor__workspace=ws).first())
+        if not ad:
+            return Response(status=404)
+        if ad.analysis_status == 'skipped':
+            return Response({'detail': 'Only image ads can be adapted for now.'}, status=400)
+        if ad.analysis_status != 'done' and not analyze_ad(ad):
+            ad.refresh_from_db()
+            if ad.analysis_status == 'skipped':
+                return Response({'detail': 'Only image ads can be adapted for now.'}, status=400)
+            return Response({'detail': 'This ad could not be analysed — its images may no longer be '
+                                       'available. Try again after the next sync.'}, status=502)
+        ad.refresh_from_db()
+        try:
+            idea = adapt_ad(ad, ws)
+        except Exception as exc:
+            logger.warning('competitors.adapt_failed ad=%s error=%s', ad.pk, exc)
+            return Response({'detail': 'Could not write an idea from this ad. Please try again.'}, status=502)
+        return Response(idea)

@@ -1,3 +1,4 @@
+import json
 from datetime import date, timedelta
 from unittest import mock
 
@@ -252,3 +253,146 @@ class ApiTests(TestCase):
         CompetitorAd.objects.create(competitor=c, ad_archive_id='b', is_active=False)
         row = self.client.get('/api/competitors/').json()[0]
         self.assertEqual((row['active_ads'], row['total_ads'], row['syncing']), (1, 2, True))
+
+
+ANALYSIS = {
+    'format': 'offer card', 'hook': 'A huge 100% match headline', 'angle': 'Double your first deposit',
+    'offer': {'type': 'deposit match', 'text': '100% deposit match'}, 'emotion': 'greed',
+    'audience': 'US sports fans', 'visual': {'composition': 'centered headline', 'subjects': 'coins',
+    'colors': ['green', 'gold'], 'text_overlay': 'DOUBLE IT', 'style': '3D render'},
+    'why_it_works': 'One clear number.', 'tags': ['offer', 'bold'],
+}
+IDEA = {'theme': 'Double Down', 'concept': 'c', 'visual_direction': 'v', 'extra_prompt': 'e', 'insight': 'i'}
+
+
+class AnalysisTests(TestCase):
+    def setUp(self):
+        owner = User.objects.create_user(username='an', email='an@x.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=owner)
+        self.c = Competitor.objects.create(workspace=self.ws, page_id=PAGE, page_name='Topdog Games')
+
+    def make_ad(self, ad_id, media):
+        return CompetitorAd.objects.create(competitor=self.c, ad_archive_id=ad_id, position=1,
+                                           start_date=date.today() - timedelta(days=12), media=media)
+
+    def analyse(self, ad, answer=ANALYSIS):
+        from .analysis import analyze_ad
+        with mock.patch('apps.competitors.analysis._rehost', side_effect=lambda u: f'hosted:{u}'), \
+             mock.patch('apps.fingerprint.services._call_vision_api',
+                        return_value=json.dumps(answer)) as vision:
+            ok = analyze_ad(ad)
+        ad.refresh_from_db()
+        return ok, vision
+
+    def test_an_image_ad_is_read_from_its_rehosted_images(self):
+        ad = self.make_ad('1', [{'type': 'image', 'url': 'https://fb/a.jpg'},
+                                {'type': 'video', 'url': 'https://fb/b.mp4'}])
+        ok, vision = self.analyse(ad)
+        self.assertTrue(ok)
+        self.assertEqual(vision.call_args.args[0], ['hosted:https://fb/a.jpg'])   # images only
+        self.assertEqual((ad.analysis_status, ad.analysis['hook']), ('done', 'A huge 100% match headline'))
+
+    def test_a_video_only_ad_is_skipped_without_a_model_call(self):
+        ad = self.make_ad('2', [{'type': 'video', 'url': 'https://fb/b.mp4'}])
+        ok, vision = self.analyse(ad)
+        self.assertFalse(ok)
+        vision.assert_not_called()
+        self.assertEqual(ad.analysis_status, 'skipped')
+
+    def test_an_unusable_answer_is_a_failure_that_the_next_sync_retries(self):
+        from .analysis import analyze_new_ads
+        ad = self.make_ad('3', [{'type': 'image', 'url': 'https://fb/a.jpg'}])
+        ok, _ = self.analyse(ad, answer={'nothing': 'useful'})
+        self.assertFalse(ok)
+        self.assertEqual(ad.analysis_status, 'failed')
+        with mock.patch('apps.competitors.analysis.analyze_ad', return_value=True) as again:
+            analyze_new_ads(self.c)
+        again.assert_called_once()
+
+    def test_the_sync_analyses_the_new_ads(self):
+        with mock.patch('apps.competitors.services.fetch_page_ads', return_value=scraped(ad('1', 1))), \
+             mock.patch('apps.competitors.services.analyze_new_ads', return_value=1) as analyse:
+            summary = sync_competitor(self.c)
+        analyse.assert_called_once_with(self.c)
+        self.assertEqual(summary['analysed'], 1)
+
+    def test_a_crashing_analysis_never_breaks_the_sync(self):
+        with mock.patch('apps.competitors.services.fetch_page_ads', return_value=scraped(ad('1', 1))), \
+             mock.patch('apps.competitors.services.analyze_new_ads', side_effect=RuntimeError('boom')):
+            summary = sync_competitor(self.c)
+        self.assertTrue(summary['ok'])
+        self.c.refresh_from_db()
+        self.assertIsNotNone(self.c.next_sync_at)       # not left claimed
+
+
+class AdaptTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username='ad', email='ad@x.com', password='x')
+        self.ws = Workspace.objects.create(name='Spinpals', owner=self.owner)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.owner, role='owner')
+        self.c = Competitor.objects.create(workspace=self.ws, page_id=PAGE, page_name='Topdog Games')
+        self.ad = CompetitorAd.objects.create(
+            competitor=self.c, ad_archive_id='1', position=2, start_date=date.today() - timedelta(days=40),
+            media=[{'type': 'image', 'url': 'https://fb/a.jpg'}], analysis=ANALYSIS, analysis_status='done')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.owner)
+
+    def adapt(self, ad=None, offers=('CASHBACK | Up to 5% of your losses',), client=None):
+        with mock.patch('apps.creatives.services._load_promo_texts', return_value=list(offers)), \
+             mock.patch('apps.fingerprint.services._call_text_api', return_value=json.dumps(IDEA)) as text:
+            resp = (client or self.client).post(f'/api/competitors/ads/{(ad or self.ad).pk}/adapt/',
+                                                HTTP_X_WORKSPACE_ID=str(self.ws.id))
+        return resp, text
+
+    def test_the_idea_is_shaped_like_a_trend_idea_and_names_its_source(self):
+        resp, _ = self.adapt()
+        self.assertEqual(resp.status_code, 200)
+        idea = resp.json()
+        for key in ('id', 'theme', 'concept', 'visual_direction', 'extra_prompt', 'insight'):
+            self.assertIn(key, idea)
+        self.assertEqual(idea['source']['competitor_ad_id'], self.ad.pk)
+
+    def test_only_our_offers_reach_the_model(self):
+        _, text = self.adapt()
+        prompt = text.call_args.args[1]
+        self.assertIn('CASHBACK | Up to 5% of your losses', prompt)
+        self.assertNotIn('100% deposit match', prompt)          # the rival's offer stays out
+
+    def test_with_no_offers_of_ours_the_model_is_told_to_make_none(self):
+        _, text = self.adapt(offers=())
+        self.assertIn('make no specific offer', text.call_args.args[1])
+
+    def test_an_unanalysed_ad_is_analysed_first(self):
+        CompetitorAd.objects.filter(pk=self.ad.pk).update(analysis={}, analysis_status='')
+
+        def analysed(ad):
+            CompetitorAd.objects.filter(pk=ad.pk).update(analysis=ANALYSIS, analysis_status='done')
+            return True
+        with mock.patch('apps.competitors.views.analyze_ad', side_effect=analysed) as run:
+            resp, _ = self.adapt()
+        run.assert_called_once()
+        self.assertEqual(resp.status_code, 200)
+
+    def test_video_ads_are_refused(self):
+        CompetitorAd.objects.filter(pk=self.ad.pk).update(analysis_status='skipped')
+        resp, text = self.adapt()
+        self.assertEqual(resp.status_code, 400)
+        text.assert_not_called()
+
+    def test_analysts_cannot_adapt(self):
+        analyst = User.objects.create_user(username='an2', email='an2@x.com', password='x')
+        WorkspaceMember.objects.create(workspace=self.ws, user=analyst, role='analyst')
+        c = APIClient()
+        c.force_authenticate(user=analyst)
+        resp, text = self.adapt(client=c)
+        self.assertEqual(resp.status_code, 403)
+        text.assert_not_called()
+
+    def test_another_workspaces_ad_is_not_found(self):
+        other = User.objects.create_user(username='o2', email='o2@x.com', password='x')
+        ows = Workspace.objects.create(name='Other', owner=other)
+        theirs = CompetitorAd.objects.create(
+            competitor=Competitor.objects.create(workspace=ows, page_id='222222'),
+            ad_archive_id='t', analysis=ANALYSIS, analysis_status='done')
+        resp, _ = self.adapt(ad=theirs)
+        self.assertEqual(resp.status_code, 404)

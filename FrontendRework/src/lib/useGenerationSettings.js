@@ -79,7 +79,11 @@ export function useGenerationSettings(initial = {}) {
   // ── Trend Scout ──
   const [trendBrief, setTrendBrief] = useState(null);
   const [trendLoading, setTrendLoading] = useState(false);
-  const [activeTrendIdeaId, setActiveTrendIdeaId] = useState(null);
+  // An idea brought in from elsewhere (Brand Kit → Competitors → "Make our
+  // version"). It rides the Trend Scout path — same shape, same selection —
+  // and arrives already selected.
+  const [pinnedIdea, setPinnedIdea] = useState(initial.pinned_idea || null);
+  const [activeTrendIdeaId, setActiveTrendIdeaId] = useState(initial.pinned_idea?.id || null);
   const trendPollRef = useRef(null);
 
   // ── @mention (character insertion in Extra Instructions) ──
@@ -412,6 +416,7 @@ export function useGenerationSettings(initial = {}) {
 
     // trend scout
     trendBrief, trendLoading, activeTrendIdeaId, handleRefreshTrends, handleSelectTrendIdea,
+    pinnedIdea, clearPinnedIdea: () => { setPinnedIdea(null); setActiveTrendIdeaId(id => (id === pinnedIdea?.id ? null : id)); },
 
     // mention
     mentionOpen, setMentionOpen, mentionMatches, mentionIdx,

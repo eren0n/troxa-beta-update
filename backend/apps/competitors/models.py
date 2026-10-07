@@ -62,6 +62,16 @@ class CompetitorAd(models.Model):
     cards          = models.JSONField(default=list, blank=True)
     raw            = models.JSONField(default=dict, blank=True)
 
+    # What an AI read of the ad's images found (see analysis.py). Done once,
+    # while the media links are still fresh, so it outlives the media. Video
+    # ads are skipped for now.
+    ANALYSIS_STATUS = [('', 'Not yet'), ('done', 'Done'), ('failed', 'Failed'), ('skipped', 'Skipped')]
+    analysis        = models.JSONField(default=dict, blank=True)
+    analysis_status = models.CharField(max_length=16, choices=ANALYSIS_STATUS, blank=True, default='',
+                                       db_index=True)
+    analysis_error  = models.TextField(blank=True, default='')
+    analyzed_at     = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         unique_together = ('competitor', 'ad_archive_id')
         ordering = ['position', '-start_date']

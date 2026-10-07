@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Swords, Plus, Loader2, RefreshCw, Trash2, ExternalLink, AlertTriangle, Film, ImageOff, Layers, Clock,
+  Swords, Plus, Loader2, RefreshCw, Trash2, ExternalLink, AlertTriangle, Film, ImageOff, Layers, Clock, Wand2,
 } from 'lucide-react';
 import { competitorsApi } from '../../lib/api';
 import { GLASS_STYLE } from '../ui/GlassCard';
@@ -151,8 +152,11 @@ function AdMedia({ ad }) {
   );
 }
 
-function AdCard({ ad, showCompetitor }) {
+function AdCard({ ad, showCompetitor, canAdapt, adapting, onAdapt }) {
   const proven = ad.days_running >= PROVEN_DAYS;
+  const a = ad.analysis_status === 'done' ? ad.analysis : null;
+  // Only image ads are read for now; videos come later.
+  const hasImage = ad.media?.some((m) => m.type === 'image');
   return (
     <div style={GLASS_STYLE} className="rounded-2xl overflow-hidden flex flex-col">
       <AdMedia ad={ad} />
@@ -173,6 +177,19 @@ function AdCard({ ad, showCompetitor }) {
         {showCompetitor && <p className="text-[11px] font-black text-blue-400 truncate">{ad.competitor_name}</p>}
         {ad.title && <p className="text-sm font-black text-white line-clamp-2">{ad.title}</p>}
         {ad.body && <p className="text-xs text-slate-400 line-clamp-4 whitespace-pre-line">{ad.body}</p>}
+        {a && (
+          <div className="rounded-lg bg-white/[0.03] border border-white/6 p-2.5 space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">{a.format}</p>
+            <p className="text-xs text-slate-300 line-clamp-3"><span className="font-black text-white">Hook: </span>{a.hook}</p>
+            {a.offer?.text && <p className="text-[11px] text-slate-500 line-clamp-2">Offer: {a.offer.text}</p>}
+          </div>
+        )}
+        {canAdapt && hasImage && ad.analysis_status !== 'skipped' && (
+          <button onClick={() => onAdapt(ad)} disabled={adapting}
+            className="flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-black text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition-all">
+            {adapting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Writing our version…</> : <><Wand2 className="w-3.5 h-3.5" /> Make our version</>}
+          </button>
+        )}
         <div className="mt-auto pt-2 flex items-center justify-end gap-2">
           <a href={ad.ad_library_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-white shrink-0">
@@ -205,6 +222,8 @@ export default function CompetitorsTab({ isEditor }) {
   const [page, setPage] = useState(1);
   const [loadingAds, setLoadingAds] = useState(true);
   const adsRequest = useRef(0);
+  const [adaptingId, setAdaptingId] = useState(null);
+  const navigate = useNavigate();
 
   const say = (msg, error = false) => {
     setNotice({ msg, error });
@@ -257,7 +276,7 @@ export default function CompetitorsTab({ isEditor }) {
       const c = await competitorsApi.add(link.trim());
       setCompetitors((prev) => [...(prev || []), c]);
       setLink('');
-      say('Added — reading their ads now. This takes a minute or two.');
+      say('Added — reading and analysing their ads now. This takes a few minutes.');
     } catch (err) {
       say(err.message, true);
     } finally {
@@ -271,6 +290,18 @@ export default function CompetitorsTab({ isEditor }) {
       setCompetitors((prev) => prev.map((x) => (x.id === c.id ? { ...x, syncing: true } : x)));
     } catch (err) {
       say(err.message, true);
+    }
+  };
+
+  // Turn one rival ad into an idea for our brand, then open Generate with it selected.
+  const handleAdapt = async (ad) => {
+    setAdaptingId(ad.id);
+    try {
+      const idea = await competitorsApi.adapt(ad.id);
+      navigate('/dashboard/create-v2', { state: { competitorIdea: idea } });
+    } catch (err) {
+      say(err.message, true);
+      setAdaptingId(null);
     }
   };
 
@@ -374,7 +405,10 @@ export default function CompetitorsTab({ isEditor }) {
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {ads.map((ad) => <AdCard key={ad.id} ad={ad} showCompetitor={!selected} />)}
+                {ads.map((ad) => (
+                  <AdCard key={ad.id} ad={ad} showCompetitor={!selected} canAdapt={isEditor}
+                    adapting={adaptingId === ad.id} onAdapt={handleAdapt} />
+                ))}
               </div>
               {hasMore && (
                 <div className="flex justify-center">

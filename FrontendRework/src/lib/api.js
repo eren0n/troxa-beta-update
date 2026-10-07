@@ -499,6 +499,8 @@ export const competitorsApi = {
   add:    (url) => request('POST', '/competitors/', { url }),
   remove: (id) => request('DELETE', `/competitors/${id}/`),
   sync:   (id) => request('POST', `/competitors/${id}/sync/`),
+  // one idea for our brand from one competitor ad, shaped like a Trend Scout idea
+  adapt:  (adId) => request('POST', `/competitors/ads/${adId}/adapt/`),
   // filters: competitor, active, format, min_days, ordering, page, page_size
   ads: (filters = {}) => {
     const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== '' && v != null));

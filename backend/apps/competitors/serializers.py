@@ -29,4 +29,5 @@ class CompetitorAdSerializer(serializers.ModelSerializer):
         fields = ('id', 'competitor', 'competitor_name', 'ad_archive_id', 'is_active',
                   'start_date', 'ended_at', 'days_running', 'position', 'display_format',
                   'platforms', 'cta_text', 'cta_type', 'link_url', 'title', 'body',
-                  'media', 'cards', 'first_seen_at', 'last_seen_at', 'ad_library_url')
+                  'media', 'cards', 'first_seen_at', 'last_seen_at', 'ad_library_url',
+                  'analysis', 'analysis_status')

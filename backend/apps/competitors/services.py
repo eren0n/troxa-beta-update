@@ -14,6 +14,7 @@ from django.db import close_old_connections
 from django.utils import timezone
 
 from .models import Competitor, CompetitorAd
+from .analysis import analyze_new_ads
 from .scraper import ScrapeError, fetch_page_ads
 
 logger = logging.getLogger(__name__)
@@ -102,12 +103,22 @@ def sync_competitor(competitor):
 
     if result.page_name:
         competitor.page_name = result.page_name[:255]
+
+    # Read the new ads now, while Meta's media links are fresh. The
+    # competitor stays marked as syncing until this is done, so the page
+    # reloads once, with the analyses in.
+    try:
+        analysed = analyze_new_ads(competitor)
+    except Exception:
+        logger.exception('competitors.analysis_crashed competitor=%s', competitor.pk)
+        analysed = 0
     competitor.last_synced_at = now
     competitor.next_sync_at = now + SYNC_EVERY
     competitor.save(update_fields=['page_name', 'last_synced_at', 'next_sync_at', 'last_error'])
 
     summary = {'ok': True, 'complete': result.complete, 'captured': len(result.ads),
-               'site_count': result.site_count, 'new': created_count, 'ended': ended}
+               'site_count': result.site_count, 'new': created_count, 'ended': ended,
+               'analysed': analysed}
     logger.info('competitors.synced competitor=%s %s', competitor.pk, summary)
     return summary
 

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   Check, Plus, X, Image as ImageIcon, ChevronDown, Info, Wand2, Sliders,
   PenLine, AlertTriangle, Loader2, Brain, RefreshCw, TrendingUp, Users, Flame,
-  Sparkles, CheckCircle2, Link as LinkIcon,
+  Sparkles, CheckCircle2, Link as LinkIcon, Swords,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { GLASS_STYLE } from '../ui/GlassCard';
@@ -342,6 +342,46 @@ export default function GenerationSettingsPanel({ settings: s, footer }) {
             </div>
           </div>
         )}
+
+        {/* Auto mode: an idea adapted from a competitor's ad (Brand Kit →
+            Competitors). Selected on arrival; it competes with briefs the same
+            way a trend idea does. */}
+        {s.mode === 'auto' && !briefSelected && s.pinnedIdea && (() => {
+          const idea = s.pinnedIdea;
+          const isActive = s.activeTrendIdeaId === idea.id;
+          return (
+            <div style={GLASS_STYLE} className="rounded-2xl p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-5 h-5 rounded-lg bg-rose-500/15 border border-rose-500/20 flex items-center justify-center shrink-0"><Swords className="w-3 h-3 text-rose-400" /></div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
+                    From {idea.source?.competitor_name || 'a competitor'}
+                  </span>
+                </div>
+                <button onClick={s.clearPinnedIdea} title="Remove this idea"
+                  className="p-1 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-all">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+              <button onClick={() => s.handleSelectTrendIdea(idea)}
+                className={`w-full flex gap-3 text-left p-2.5 rounded-xl border transition-all ${isActive ? 'bg-rose-500/10 border-rose-500/35' : 'bg-white/3 border-white/6 hover:border-white/12'}`}>
+                {idea.source?.image && (
+                  <img src={idea.source.image} alt="" referrerPolicy="no-referrer"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    className="w-14 h-14 rounded-lg object-cover shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className={`text-xs font-black leading-tight ${isActive ? 'text-rose-200' : 'text-white'}`}>{idea.theme}</p>
+                  <p className="text-[10px] text-slate-400 leading-relaxed mt-1 line-clamp-3">{idea.concept}</p>
+                  <p className="mt-1.5 text-[9px] font-black uppercase tracking-wide">
+                    {isActive ? <span className="text-rose-300 flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5 inline" /> Selected</span> : <span className="text-slate-600">Select →</span>}
+                  </p>
+                </div>
+              </button>
+              {idea.insight && <p className="text-[10px] text-slate-500 leading-relaxed">{idea.insight}</p>}
+            </div>
+          );
+        })()}
 
         {/* Auto mode: Trend Scout — the whole block is a picker, so a selected
             campaign brief hides all of it rather than just the cards. */}
