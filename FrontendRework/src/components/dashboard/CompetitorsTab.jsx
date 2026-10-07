@@ -173,10 +173,7 @@ function AdCard({ ad, showCompetitor }) {
         {showCompetitor && <p className="text-[11px] font-black text-blue-400 truncate">{ad.competitor_name}</p>}
         {ad.title && <p className="text-sm font-black text-white line-clamp-2">{ad.title}</p>}
         {ad.body && <p className="text-xs text-slate-400 line-clamp-4 whitespace-pre-line">{ad.body}</p>}
-        <div className="mt-auto pt-2 flex items-center justify-between gap-2">
-          {ad.cta_text ? (
-            <span className="px-2 py-1 rounded-md text-[11px] font-black text-white bg-blue-600/80 truncate">{ad.cta_text}</span>
-          ) : <span />}
+        <div className="mt-auto pt-2 flex items-center justify-end gap-2">
           <a href={ad.ad_library_url} target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-white shrink-0">
             Ad Library <ExternalLink className="w-3 h-3" />
