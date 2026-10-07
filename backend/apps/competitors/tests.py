@@ -509,3 +509,44 @@ class StaleAnalysisTests(TestCase):
         with mock.patch('apps.competitors.analysis.analyze_ad', return_value=True) as run:
             analyze_new_ads(c)
         self.assertEqual([call.args[0].pk for call in run.call_args_list], [old.pk])
+
+
+class CountryTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username='co', email='co@x.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.owner)
+        WorkspaceMember.objects.create(workspace=self.ws, user=self.owner, role='owner')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.owner)
+
+    def add(self, **body):
+        with mock.patch('apps.competitors.views.sync_in_background'):
+            return self.client.post('/api/competitors/', body, format='json')
+
+    def test_parse_country(self):
+        from .services import parse_country
+        self.assertEqual(parse_country('tr'), 'TR')
+        self.assertEqual(parse_country('', f'https://x/?country=GB&view_all_page_id={PAGE}'), 'GB')
+        self.assertEqual(parse_country('DE', 'https://x/?country=GB'), 'DE')      # the choice wins
+        self.assertEqual(parse_country(''), 'US')
+        self.assertEqual(parse_country('all'), 'ALL')
+        self.assertIsNone(parse_country('Turkey'))
+
+    def test_the_chosen_country_is_kept_and_read(self):
+        resp = self.add(page_id=PAGE, country='TR')
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()['country'], 'TR')
+        self.assertIn('country=TR', resp.json()['ad_library_url'])
+        c = Competitor.objects.get(pk=resp.json()['id'])
+        with mock.patch('apps.competitors.services.fetch_page_ads', return_value=scraped()) as fetch, \
+             mock.patch('apps.competitors.services.analyze_new_ads', return_value=0):
+            sync_competitor(c)
+        fetch.assert_called_once_with(PAGE, 'TR')
+
+    def test_one_page_can_be_followed_in_two_countries_but_not_twice_in_one(self):
+        self.assertEqual(self.add(page_id=PAGE, country='US').status_code, 201)
+        self.assertEqual(self.add(page_id=PAGE, country='TR').status_code, 201)
+        self.assertEqual(self.add(page_id=PAGE, country='TR').status_code, 400)
+
+    def test_a_bad_country_is_refused(self):
+        self.assertEqual(self.add(page_id=PAGE, country='Turkey').status_code, 400)

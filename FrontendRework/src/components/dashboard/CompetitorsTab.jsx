@@ -31,6 +31,16 @@ const FORMATS = [
 // An ad still paid for after a month is the nearest public signal that it works.
 const PROVEN_DAYS = 30;
 const PAGE_SIZE = 24;
+// Where the ads ran, as the Ad Library filters it.
+const COUNTRIES = [
+  ['US', 'United States'], ['NG', 'Nigeria'], ['GH', 'Ghana'], ['KE', 'Kenya'], ['ZA', 'South Africa'],
+  ['TZ', 'Tanzania'], ['UG', 'Uganda'], ['TR', 'Türkiye'], ['GB', 'United Kingdom'], ['IE', 'Ireland'],
+  ['CA', 'Canada'], ['AU', 'Australia'], ['NZ', 'New Zealand'], ['DE', 'Germany'], ['FR', 'France'],
+  ['ES', 'Spain'], ['IT', 'Italy'], ['NL', 'Netherlands'], ['SE', 'Sweden'], ['PL', 'Poland'],
+  ['BR', 'Brazil'], ['MX', 'Mexico'], ['AR', 'Argentina'], ['CO', 'Colombia'], ['PE', 'Peru'],
+  ['CL', 'Chile'], ['IN', 'India'], ['PH', 'Philippines'], ['ID', 'Indonesia'], ['AE', 'United Arab Emirates'],
+  ['ALL', 'All countries'],
+];
 
 function timeAgo(iso) {
   if (!iso) return 'never';
@@ -71,7 +81,7 @@ function CompetitorCard({ c, selected, onSelect, isEditor, onSync, onRemove }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-black text-white text-sm truncate">{c.page_name || `Page ${c.page_id}`}</p>
-          <p className="text-[11px] text-slate-600 mt-0.5 font-mono">{c.page_id}</p>
+          <p className="text-[11px] text-slate-600 mt-0.5 font-mono">{c.page_id} · {c.country === 'ALL' ? 'All countries' : c.country}</p>
         </div>
         {c.syncing ? (
           <span className="flex items-center gap-1 text-[10px] font-black text-blue-400 shrink-0">
@@ -207,6 +217,7 @@ function AdCard({ ad, showCompetitor, canAdapt, adapting, onAdapt }) {
 export default function CompetitorsTab({ isEditor }) {
   const [competitors, setCompetitors] = useState(null);
   const [link, setLink] = useState('');
+  const [country, setCountry] = useState('US');
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState(null);   // { msg, error }
 
@@ -273,7 +284,7 @@ export default function CompetitorsTab({ isEditor }) {
     if (!link.trim()) return;
     setAdding(true);
     try {
-      const c = await competitorsApi.add(link.trim());
+      const c = await competitorsApi.add(link.trim(), country);
       setCompetitors((prev) => [...(prev || []), c]);
       setLink('');
       say('Added — reading and analysing their ads now. This takes a few minutes.');
@@ -341,13 +352,22 @@ export default function CompetitorsTab({ isEditor }) {
             </div>
           </div>
           {isEditor && (
-            <form onSubmit={handleAdd} className="flex gap-2 w-full lg:w-auto">
+            <form onSubmit={handleAdd} className="flex flex-wrap sm:flex-nowrap gap-2 w-full lg:w-auto">
               <input
                 value={link}
-                onChange={(e) => setLink(e.target.value)}
+                onChange={(e) => {
+                  setLink(e.target.value);
+                  // a pasted Ad Library link already says which country it shows
+                  const m = e.target.value.match(/[?&]country=([A-Za-z]{2,3})\b/);
+                  if (m && COUNTRIES.some(([code]) => code === m[1].toUpperCase())) setCountry(m[1].toUpperCase());
+                }}
                 placeholder="Facebook page ID or Ad Library link"
-                className="flex-1 lg:w-80 min-w-0 px-3.5 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
+                className="w-full sm:w-auto sm:flex-1 lg:w-72 min-w-0 px-3.5 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-blue-500/40"
               />
+              <select value={country} onChange={(e) => setCountry(e.target.value)} aria-label="Country"
+                className="flex-1 sm:flex-none min-w-0 px-2.5 py-2.5 bg-white/[0.03] border border-white/8 rounded-xl text-sm text-white focus:outline-none focus:border-blue-500/40">
+                {COUNTRIES.map(([code, name]) => <option key={code} value={code}>{code === 'ALL' ? name : `${code} · ${name}`}</option>)}
+              </select>
               <button type="submit" disabled={adding || !link.trim()}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl font-black text-sm transition-all shrink-0">
                 {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Follow

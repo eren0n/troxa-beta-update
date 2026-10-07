@@ -32,6 +32,8 @@ _browser_slot = threading.Semaphore(1)
 
 _PAGE_ID = re.compile(r'^\d{5,20}$')
 _PAGE_ID_IN_URL = re.compile(r'(?:view_all_page_id|page_id|id)=(\d{5,20})')
+_COUNTRY = re.compile(r'^(?:[A-Z]{2}|ALL)$')
+_COUNTRY_IN_URL = re.compile(r'[?&]country=([A-Za-z]{2,3})\b')
 
 
 def parse_page_id(value):
@@ -46,6 +48,19 @@ def parse_page_id(value):
     return m.group(1) if m else None
 
 
+def parse_country(value, url=''):
+    """
+    The Ad Library country to read: the one asked for, else the one in a
+    pasted link, else US. Returns None for anything that isn't a two-letter
+    code or ALL.
+    """
+    value = (value or '').strip().upper()
+    if not value:
+        m = _COUNTRY_IN_URL.search(url or '')
+        value = m.group(1).upper() if m else 'US'
+    return value if _COUNTRY.match(value) else None
+
+
 def sync_competitor(competitor):
     """
     Bring one competitor's ads up to date. Returns a small summary dict.
@@ -54,7 +69,7 @@ def sync_competitor(competitor):
     now = timezone.now()
     try:
         with _browser_slot:
-            result = fetch_page_ads(competitor.page_id)
+            result = fetch_page_ads(competitor.page_id, competitor.country)
     except ScrapeError as exc:
         competitor.last_error = str(exc)[:1000]
         competitor.next_sync_at = now + RETRY_AFTER_ERROR

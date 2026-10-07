@@ -496,7 +496,7 @@ export const mgmtApi = {
 
 export const competitorsApi = {
   list:   () => request('GET', '/competitors/'),
-  add:    (url) => request('POST', '/competitors/', { url }),
+  add:    (url, country) => request('POST', '/competitors/', { url, country }),
   remove: (id) => request('DELETE', `/competitors/${id}/`),
   sync:   (id) => request('POST', `/competitors/${id}/sync/`),
   // one idea for our brand from one competitor ad, shaped like a Trend Scout idea

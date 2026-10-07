@@ -11,6 +11,9 @@ class Competitor(models.Model):
     page_id       = models.CharField(max_length=32)
     # Filled in from the Ad Library on the first successful sync.
     page_name     = models.CharField(max_length=255, blank=True, default='')
+    # Where the ads ran, as the Ad Library filters it: an ISO country code, or
+    # ALL. Not where we look from — that is the server's own location.
+    country       = models.CharField(max_length=3, default='US')
     created_by    = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)
 
@@ -21,7 +24,7 @@ class Competitor(models.Model):
     last_error     = models.TextField(blank=True, default='')
 
     class Meta:
-        unique_together = ('workspace', 'page_id')
+        unique_together = ('workspace', 'page_id', 'country')
         ordering = ['page_name', 'page_id']
 
     def __str__(self):
@@ -30,7 +33,7 @@ class Competitor(models.Model):
     @property
     def ad_library_url(self):
         return ('https://www.facebook.com/ads/library/?active_status=active&ad_type=all'
-                f'&country=US&media_type=all&search_type=page&view_all_page_id={self.page_id}')
+                f'&country={self.country}&media_type=all&search_type=page&view_all_page_id={self.page_id}')
 
 
 class CompetitorAd(models.Model):

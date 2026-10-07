@@ -11,7 +11,7 @@ class CompetitorSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Competitor
-        fields = ('id', 'page_id', 'page_name', 'ad_library_url', 'active_ads', 'total_ads',
+        fields = ('id', 'page_id', 'page_name', 'country', 'ad_library_url', 'active_ads', 'total_ads',
                   'last_synced_at', 'last_error', 'syncing', 'created_at')
 
     def get_syncing(self, obj):

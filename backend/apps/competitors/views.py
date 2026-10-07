@@ -12,7 +12,7 @@ from apps.accounts.views import get_workspace, require_editor
 from .analysis import adapt_ad, analyze_ad, needs_analysis
 from .models import Competitor, CompetitorAd
 from .serializers import CompetitorAdSerializer, CompetitorSerializer
-from .services import MAX_COMPETITORS_PER_WORKSPACE, claim, parse_page_id, sync_in_background
+from .services import MAX_COMPETITORS_PER_WORKSPACE, claim, parse_country, parse_page_id, sync_in_background
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +69,20 @@ class CompetitorListView(APIView):
         if not page_id:
             return Response({'detail': 'Give a Facebook page id, or an Ad Library link that '
                                        'contains view_all_page_id.'}, status=400)
-        if ws.competitors.filter(page_id=page_id).exists():
-            return Response({'detail': 'This page is already being followed.'}, status=400)
+        country = parse_country(request.data.get('country'), request.data.get('url'))
+        if not country:
+            return Response({'detail': 'Country must be a two-letter code such as US or TR, or ALL.'},
+                            status=400)
+        if ws.competitors.filter(page_id=page_id, country=country).exists():
+            return Response({'detail': f'This page is already being followed in {country}.'}, status=400)
         if ws.competitors.count() >= MAX_COMPETITORS_PER_WORKSPACE:
             return Response({'detail': f'A workspace can follow up to '
                                        f'{MAX_COMPETITORS_PER_WORKSPACE} competitors.'}, status=400)
 
         # Created already claimed (next_sync_at empty) and synced straight
         # away, so the page fills in without waiting for tomorrow's run.
-        competitor = ws.competitors.create(page_id=page_id, created_by=request.user, next_sync_at=None)
+        competitor = ws.competitors.create(page_id=page_id, country=country, created_by=request.user,
+                                           next_sync_at=None)
         sync_in_background(competitor.pk)
         return Response(CompetitorSerializer(_with_counts(ws.competitors.filter(pk=competitor.pk)).first()).data,
                         status=201)
