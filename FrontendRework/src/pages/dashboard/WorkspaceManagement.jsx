@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Users, CreditCard, Plug } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../../contexts/AuthContext';
+import InlineRename from '../../components/dashboard/InlineRename';
 import TeamPanel from './workspace/TeamPanel';
 import BillingPanel from './workspace/BillingPanel';
 import IntegrationsPanel from './workspace/IntegrationsPanel';
@@ -22,6 +24,8 @@ export default function WorkspaceManagement() {
     TABS.some((t) => t.id === requested) ? requested : 'team'
   );
 
+  const { activeWorkspace, isAdmin, renameWorkspace } = useAuth();
+
   const selectTab = (id) => {
     setActiveTab(id);
     setSearchParams(id === 'team' ? {} : { tab: id }, { replace: true });
@@ -31,6 +35,20 @@ export default function WorkspaceManagement() {
     <div className="space-y-8 pb-20">
       <div>
         <h1 className="text-2xl font-black text-white">Workspace Management</h1>
+        {activeWorkspace && (
+          <div className="mt-2 max-w-md">
+            {isAdmin ? (
+              <InlineRename
+                value={activeWorkspace.name}
+                onSave={(name) => renameWorkspace(activeWorkspace.id, name)}
+                textClassName="text-base font-black text-slate-200 truncate"
+                inputClassName="flex-1 min-w-0 bg-black/40 border border-blue-500/50 rounded-lg px-2.5 py-1.5 text-sm font-black text-white outline-none"
+              />
+            ) : (
+              <p className="text-base font-black text-slate-200 truncate">{activeWorkspace.name}</p>
+            )}
+          </div>
+        )}
         <p className="text-slate-500 text-sm mt-1">Team, integrations and billing for your workspace — all in one place</p>
       </div>
 

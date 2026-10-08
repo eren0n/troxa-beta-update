@@ -257,6 +257,7 @@ export const authApi = {
 export const workspaceApi = {
   list: () => request('GET', '/workspaces/'),
   create: (name) => request('POST', '/workspaces/', { name }),
+  rename: (id, name) => request('PATCH', `/workspaces/${id}/`, { name }),
 };
 
 export const creativesApi = {

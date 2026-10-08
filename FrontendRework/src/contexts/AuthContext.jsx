@@ -137,6 +137,15 @@ export function AuthProvider({ children }) {
     return created;
   }, [fetchWorkspaces, fetchCredits]);
 
+  // Rename in place: the switcher, page headers and anything else reading
+  // workspaces/activeWorkspace pick the new name up without a reload.
+  const renameWorkspace = useCallback(async (id, name) => {
+    const updated = await workspaceApi.rename(id, name);
+    setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, name: updated.name } : w)));
+    setActiveWorkspace((prev) => (prev && prev.id === id ? { ...prev, name: updated.name } : prev));
+    return updated;
+  }, []);
+
   const value = {
     user,
     workspaces,
@@ -157,6 +166,7 @@ export function AuthProvider({ children }) {
     register,
     switchWorkspace,
     createWorkspace,
+    renameWorkspace,
     refreshCredits,
     refreshUser,
   };

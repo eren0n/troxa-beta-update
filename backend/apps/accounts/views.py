@@ -543,6 +543,23 @@ class WorkspaceDetailView(APIView):
             return Response(status=404)
         return Response(WorkspaceSerializer(ws, context={'request': request}).data)
 
+    def patch(self, request, pk):
+        """Rename the workspace. Owners and admins only."""
+        ws = self._get_ws(pk, request.user)
+        if not ws:
+            return Response(status=404)
+        if not require_admin(request.user, ws):
+            return Response({'detail': 'Only owners and admins can rename the workspace.'}, status=403)
+        name = (request.data.get('name') or '').strip()
+        if not name:
+            return Response({'detail': 'Name required.'}, status=400)
+        max_len = Workspace._meta.get_field('name').max_length
+        if len(name) > max_len:
+            return Response({'detail': f'Name can be at most {max_len} characters.'}, status=400)
+        ws.name = name
+        ws.save(update_fields=['name'])
+        return Response(WorkspaceSerializer(ws, context={'request': request}).data)
+
 
 class WorkspaceMembersView(APIView):
     permission_classes = [IsAuthenticated]
