@@ -84,10 +84,17 @@ RATED_BLOCK_PREFIX = 'rated:'
 _ECHOED_IMAGE_FIELDS = ('fallback', 'image_width', 'image_height', 'image_bytes', 'is_animated')
 
 
-def _creative_url(creative):
+def _creative_url(creative, with_logo=False):
+    """
+    The image Slack shows: the one the gallery shows. The auto-stamped logo
+    copy (logo_applied_url) is used only where someone applied a logo on
+    purpose — the Logo Editor's "Logo applied" post.
+    """
     if creative is None:
         return ''
-    return creative.logo_applied_url or creative.image_url or ''
+    if with_logo and creative.logo_applied_url:
+        return creative.logo_applied_url
+    return creative.image_url or ''
 
 
 def _rating_status_text(creative, actor=None):
@@ -162,11 +169,11 @@ def creative_action_blocks(creative, actor=None):
     return blocks
 
 
-def _creative_blocks(creative, title, alt=None):
+def _creative_blocks(creative, title, alt=None, with_logo=False):
     """An image plus its own rating row, so every variant in a post is rateable."""
     blocks = [{
         'type': 'image',
-        'image_url': _creative_url(creative),
+        'image_url': _creative_url(creative, with_logo),
         'alt_text': (alt or title)[:2000],
         'title': {'type': 'plain_text', 'text': title[:75]},
     }]
@@ -372,7 +379,7 @@ def notify_slack_video(workspace, vjob):
 
 def notify_slack_logo_save(workspace, creatives, user=None):
     channels = _get_channels(workspace, 'logos')
-    creatives = [c for c in (creatives or []) if _creative_url(c)]
+    creatives = [c for c in (creatives or []) if _creative_url(c, with_logo=True)]
     if not channels or not creatives:
         return
 
@@ -385,7 +392,7 @@ def notify_slack_logo_save(workspace, creatives, user=None):
                 + (f'\n*Saved by:* {by}' if by else ''),
     }}]
     for i, c in enumerate(creatives[:4], 1):
-        blocks.extend(_creative_blocks(c, f'Variant {i}', f'With Logo — Variant {i}'))
+        blocks.extend(_creative_blocks(c, f'Variant {i}', f'With Logo — Variant {i}', with_logo=True))
     if count > 4:
         blocks.append({'type': 'context', 'elements': [
             {'type': 'mrkdwn', 'text': f'_+{count - 4} more in your <{base_url}/dashboard|Troxa dashboard>_'}]})
@@ -744,7 +751,7 @@ def post_creatives_to_channel(sc, token, creatives):
     """
     base_url = settings.SITE_BASE_URL
     for creative in creatives:
-        url = creative.logo_applied_url or creative.image_url
+        url = _creative_url(creative)
         if not url:
             continue
         blocks = [

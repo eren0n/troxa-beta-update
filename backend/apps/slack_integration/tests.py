@@ -808,3 +808,38 @@ class SlackConnectionTests(TestCase):
         migration = importlib.import_module('apps.slack_integration.migrations.0005_workspace_connection')
         migration.connect_from_channels(registry, None)
         self.assertEqual(SlackConnection.objects.get(workspace=self.ws).installation, inst)
+
+
+class SlackImageTests(TestCase):
+    """Slack shows the image the gallery shows — not the auto-stamped logo copy."""
+
+    def setUp(self):
+        user = User.objects.create_user(username='im', email='im@x.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=user)
+        inst = SlackInstallation.objects.create(team_id='T1', bot_token='xoxb-1')
+        self.chan = SlackChannel.objects.create(workspace=self.ws, installation=inst, channel_id='C1',
+                                                content_types=['creatives', 'logos'],
+                                                auto_post_types=['creatives', 'logos'])
+        self.creative = GeneratedCreative.objects.create(
+            workspace=self.ws, name='Shot', image_url='https://cdn/gallery.png',
+            logo_applied_url='https://site/media/auto_logo.png')
+
+    def images(self, call):
+        return [b['image_url'] for b in call.args[2]['blocks'] if b.get('type') == 'image']
+
+    def test_creative_posts_use_the_gallery_image(self):
+        from .services import _creative_blocks
+        blocks = _creative_blocks(self.creative, 'Variant 1')
+        self.assertEqual(blocks[0]['image_url'], 'https://cdn/gallery.png')
+
+    def test_a_manual_post_uses_the_gallery_image(self):
+        from .services import post_creatives_to_channel
+        with mock.patch('apps.slack_integration.services.post_message') as post:
+            post_creatives_to_channel(self.chan, 'xoxb-1', [self.creative])
+        self.assertEqual(self.images(post.call_args), ['https://cdn/gallery.png'])
+
+    def test_a_logo_editor_save_still_shows_the_logo(self):
+        from .services import notify_slack_logo_save
+        with mock.patch('apps.slack_integration.services.post_message') as post:
+            notify_slack_logo_save(self.ws, [self.creative])
+        self.assertEqual(self.images(post.call_args), ['https://site/media/auto_logo.png'])
