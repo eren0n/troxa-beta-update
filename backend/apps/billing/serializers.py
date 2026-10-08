@@ -33,10 +33,12 @@ class CreditsSerializer(serializers.ModelSerializer):
     used     = serializers.IntegerField(source='credit_used')
     total    = serializers.SerializerMethodField()
     plan     = serializers.CharField(source='plan.name', read_only=True)
+    # seats the plan allows; None = unlimited
+    member_limit = serializers.IntegerField(source='plan.member_limit', read_only=True, allow_null=True)
 
     class Meta:
         model  = Subscription
-        fields = ('balance', 'used', 'total', 'plan', 'updated_at')
+        fields = ('balance', 'used', 'total', 'plan', 'member_limit', 'updated_at')
 
     def get_balance(self, obj):
         return obj.credits_available   # None = unlimited

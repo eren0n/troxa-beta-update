@@ -233,7 +233,7 @@ function ApiKey({ keyData, onDelete, canDelete }) {
 }
 
 function TeamWorkspacePage() {
-  const { activeWorkspace, isAdmin } = useAuth();
+  const { activeWorkspace, isAdmin, credits } = useAuth();
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [apiKeys, setApiKeys] = useState([]);
@@ -311,6 +311,10 @@ function TeamWorkspacePage() {
   };
 
   const seatCount = members.length;
+  // from the workspace's plan (Billing → plans); null = unlimited, undefined = not loaded yet
+  const seatLimit = credits?.member_limit;
+  const seatLabel = seatLimit === null ? `${seatCount} / Unlimited`
+    : seatLimit ? `${seatCount} / ${seatLimit}` : `${seatCount}`;
 
   return (
     <div className="space-y-6">
@@ -371,7 +375,7 @@ function TeamWorkspacePage() {
               <h3 className="font-black text-white text-sm">Active Members</h3>
             </div>
             <span className="text-[10px] font-black text-slate-600 bg-white/4 border border-white/6 px-2.5 py-1 rounded-lg">
-              {seatCount} / 10 seats
+              {seatLabel} seats
             </span>
           </div>
 
@@ -405,12 +409,12 @@ function TeamWorkspacePage() {
           <div className="px-6 py-4 border-t border-white/5">
             <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mb-2">
               <span>Seat Usage</span>
-              <span>{seatCount} / 10</span>
+              <span>{seatLabel}</span>
             </div>
             <div className="w-full h-1.5 bg-white/4 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${(seatCount / 10) * 100}%` }}
+                animate={{ width: `${seatLimit ? Math.min(100, (seatCount / seatLimit) * 100) : 0}%` }}
                 transition={{ duration: 1, ease: 'easeOut' }}
                 className="h-full bg-blue-500 rounded-full"
               />
