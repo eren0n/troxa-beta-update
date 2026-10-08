@@ -86,7 +86,8 @@ def _worker(run_id):
 
             all_jobs.append(job)
 
-        if automation.logo:
+        from apps.creatives.services import AUTO_LOGO
+        if AUTO_LOGO and automation.logo:
             for j in all_jobs:
                 try:
                     _auto_place_logo(run, j)

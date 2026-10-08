@@ -359,7 +359,7 @@ def _generate_worker(job_id):
                 pass
 
         # Auto logo placement (fire-and-forget)
-        if job.logo_id:
+        if AUTO_LOGO and job.logo_id:
             try:
                 _auto_place_logo_on_job(job)
             except Exception:
@@ -1619,6 +1619,13 @@ def _video_poll_complete(vjob, result):
 
 
 # ─── Logo placement ───────────────────────────────────────────────────────────
+
+# Stamping the chosen logo onto every finished image (generation and
+# automation runs) is switched off for now, at the team's request: the
+# stamped copy surfaced in Slack and elsewhere as an extra logo the gallery
+# image doesn't have. Logos placed by hand in the Logo Editor are unaffected.
+# Set True to bring it back.
+AUTO_LOGO = False
 
 def _auto_place_logo_on_job(job):
     """Auto-composite job.logo onto every creative in the job (same logic as automation)."""
