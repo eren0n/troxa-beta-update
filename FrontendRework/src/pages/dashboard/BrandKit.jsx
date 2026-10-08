@@ -342,7 +342,7 @@ function CreateTabContent({ name, setName, nameLabel, namePlaceholder, prompt, s
               )}
               <button
                 onClick={() => onRemoveRef(r.id)}
-                className="absolute top-0.5 right-0.5 p-0.5 media-btn hover:text-red-300! rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                className="absolute top-0.5 right-0.5 p-0.5 media-btn hover:text-red-300! rounded-md transition-all"
               >
                 <X className="w-2.5 h-2.5" />
               </button>
@@ -1159,7 +1159,7 @@ function BrandKitPage() {
                         <img src={charModalPreviews[0]} alt="" className="w-full h-full object-cover" />
                         <button
                           onClick={() => removeCharModalFile(0)}
-                          className="absolute top-1 right-1 p-1 media-btn hover:text-red-300! rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                          className="absolute top-1 right-1 p-1 media-btn hover:text-red-300! rounded-lg transition-all"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1653,7 +1653,7 @@ function BrandKitPage() {
                                       {isEditor && (
                                         <button
                                           onClick={() => deleteCharImg(char.id, img.id)}
-                                          className="absolute top-1 right-1 p-1 media-btn hover:text-red-300! rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                          className="absolute top-1 right-1 p-1 media-btn hover:text-red-300! rounded-lg transition-all"
                                         >
                                           <X className="w-3 h-3" />
                                         </button>
@@ -1746,7 +1746,7 @@ function BrandKitPage() {
                           <p className="text-xs font-black text-white truncate">{env.name}</p>
                         )}
                         {isEditor && (
-                          <div className="absolute top-2.5 right-2.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                          <div className="absolute top-2.5 right-2.5 flex gap-1 transition-all">
                             <button onClick={() => startEnvEditing(env)} className="p-1 bg-[#0b0e1a] border border-white/8 text-slate-500 hover:text-white rounded-lg transition-all">
                               <Edit2 className="w-3 h-3" />
                             </button>
@@ -1894,7 +1894,7 @@ function BrandKitPage() {
                                         {PALETTE_ROLES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
                                       </select>
                                       {isAdmin && (
-                                        <button onClick={() => removeColor(preset.id, c.id)} className="absolute top-2.5 right-2.5 p-1 bg-[#0b0e1a] border border-white/8 text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all">
+                                        <button onClick={() => removeColor(preset.id, c.id)} className="absolute top-2.5 right-2.5 p-1 bg-[#0b0e1a] border border-white/8 text-red-400 hover:bg-red-500/10 rounded-lg transition-all">
                                           <Trash2 className="w-3 h-3" />
                                         </button>
                                       )}
@@ -2217,7 +2217,7 @@ function BrandKitPage() {
                               </div>
                             )}
                             {isEditor && (
-                              <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <div className="absolute top-3 right-3 flex gap-1 transition-all">
                                 <button onClick={() => startEditing(camp)} className="p-1 bg-white/5 border border-white/6 text-slate-500 hover:text-white rounded-lg transition-all">
                                   <Edit2 className="w-2.5 h-2.5" />
                                 </button>
@@ -2296,7 +2296,7 @@ function BrandKitPage() {
                               <button
                                 onClick={() => setDefaultDisclaimer(d.id)}
                                 title="Set as default"
-                                className="p-1 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                className="p-1 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"
                               >
                                 <Star className="w-3 h-3" />
                               </button>
@@ -2304,7 +2304,7 @@ function BrandKitPage() {
                             {isAdmin && (
                               <button
                                 onClick={() => removeDisclaimer(d.id)}
-                                className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -2355,7 +2355,7 @@ function BrandKitPage() {
                       {isEditor && (
                         <button
                           onClick={() => removeForbiddenKeyword(k.id)}
-                          className="ml-0.5 p-0.5 text-red-500/50 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          className="ml-0.5 p-0.5 text-red-500/50 hover:text-red-400 transition-all"
                         >
                           <X className="w-3 h-3" />
                         </button>
