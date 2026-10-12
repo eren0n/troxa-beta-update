@@ -1591,15 +1591,11 @@ def _video_poll_complete(vjob, result):
     vjob.fal_request_id = ''
     vjob.save(update_fields=['status', 'video_url', 'fal_request_id', 'error_message'])
 
-    if vjob.source_creative:
+    if video_url and vjob.source_creative:
         try:
-            sc = vjob.source_creative
-            sc.media_type = 'Video'
-            if sc.name:
-                sc.name = re.sub(r'_S_', '_V_', sc.name, count=1)
-            sc.save(update_fields=['media_type', 'name'])
+            _give_video_its_own_creative(vjob)
         except Exception:
-            pass
+            logger.exception('make_video.gallery_entry_failed vjob=%s', vjob.pk)
 
     if video_url:
         try:
@@ -1616,6 +1612,44 @@ def _video_poll_complete(vjob, result):
             auto_sync_video(vjob.workspace, vjob)
         except Exception:
             pass
+
+
+def _video_name(static_name):
+    if not static_name:
+        return ''
+    renamed = re.sub(r'_S_', '_V_', static_name, count=1)
+    return renamed if renamed != static_name else f'{static_name} (video)'
+
+
+def _give_video_its_own_creative(vjob):
+    """
+    A finished video gets its own gallery entry, next to the static it was
+    made from.
+
+    The video used to be shown by turning the static itself into a video
+    (media_type and name rewritten), so the static vanished from the gallery.
+    Now the static is left as it was, a new creative carries the video, and
+    the job is pointed at it — the gallery card reads the clip from the
+    creative's video jobs, and Slack/Drive name and rate the video, not the
+    static.
+    """
+    sc = vjob.source_creative
+    video = GeneratedCreative.objects.create(
+        workspace=vjob.workspace,
+        job=sc.job,
+        campaign=sc.campaign,
+        name=_video_name(sc.name) or f'Video {vjob.pk}',
+        image_url=vjob.source_image_url or sc.image_url,   # poster: the frame that was animated
+        thumbnail_url=sc.thumbnail_url,
+        media_type='Video',
+        aspect_ratio=sc.aspect_ratio,
+        source=sc.source,
+        created_by=vjob.created_by or sc.created_by,
+        caption_status='done',
+    )
+    VideoJob.objects.filter(pk=vjob.pk).update(source_creative=video)
+    vjob.source_creative = video
+    return video
 
 
 # ─── Logo placement ───────────────────────────────────────────────────────────

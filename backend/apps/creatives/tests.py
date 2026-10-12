@@ -113,3 +113,59 @@ class AiEditSendsARatioTests(TestCase):
     def test_auto_never_reaches_the_model_when_the_source_can_be_read(self):
         for ratio in ('Current Size', '', 'auto'):
             self.assertNotEqual(self.edit(ratio)['aspect_ratio'], 'auto')
+
+
+class VideoKeepsItsStaticTests(TestCase):
+    """Making a video from a static adds a video to the gallery; the static stays."""
+
+    def setUp(self):
+        from apps.accounts.models import User, Workspace
+        from .models import GeneratedCreative, VideoJob
+        self.user = User.objects.create_user(username='vk', email='vk@x.com', password='x')
+        self.ws = Workspace.objects.create(name='WS', owner=self.user)
+        self.static = GeneratedCreative.objects.create(
+            workspace=self.ws, name='WS_S_1x1_001', image_url='https://cdn/static.png',
+            aspect_ratio='9:16', created_by=self.user)
+        self.vjob = VideoJob.objects.create(
+            workspace=self.ws, created_by=self.user, source_creative=self.static,
+            source_image_url='https://cdn/static.png', prompt='move')
+
+    def finish(self, result):
+        from .services import _video_poll_complete
+        # close_old_connections() would drop the test's own DB connection
+        with mock.patch('django.db.close_old_connections'), \
+             mock.patch('apps.slack_integration.services.notify_slack_video'), \
+             mock.patch('apps.drive_integration.services.auto_sync_video'):
+            _video_poll_complete(self.vjob, result)
+
+    def test_the_static_stays_and_the_video_gets_its_own_card(self):
+        from .models import GeneratedCreative
+        self.finish({'video': {'url': 'https://fal/clip.mp4'}})
+        self.static.refresh_from_db()
+        self.assertEqual((self.static.media_type, self.static.name), ('Photo', 'WS_S_1x1_001'))
+        self.vjob.refresh_from_db()
+        video = self.vjob.source_creative
+        self.assertNotEqual(video.pk, self.static.pk)
+        self.assertEqual((video.media_type, video.name, video.aspect_ratio), ('Video', 'WS_V_1x1_001', '9:16'))
+        self.assertEqual(GeneratedCreative.objects.filter(workspace=self.ws).count(), 2)
+
+    def test_a_failed_video_leaves_the_static_alone(self):
+        from .models import GeneratedCreative
+        self.finish({})
+        self.static.refresh_from_db()
+        self.assertEqual(self.static.media_type, 'Photo')
+        self.assertEqual(GeneratedCreative.objects.filter(workspace=self.ws).count(), 1)
+
+    def test_statics_converted_before_the_fix_are_restored_once(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import GeneratedCreative
+        # the old behaviour: the static itself became the video
+        GeneratedCreative.objects.filter(pk=self.static.pk).update(media_type='Video', name='WS_V_1x1_001')
+        call_command('restore_video_statics', '--dry-run', stdout=StringIO())
+        self.assertEqual(GeneratedCreative.objects.filter(workspace=self.ws).count(), 1)   # dry run
+        call_command('restore_video_statics', stdout=StringIO())
+        call_command('restore_video_statics', stdout=StringIO())                          # twice
+        photos = GeneratedCreative.objects.filter(workspace=self.ws, media_type='Photo')
+        self.assertEqual([p.name for p in photos], ['WS_S_1x1_001'])
+        self.assertEqual(GeneratedCreative.objects.filter(workspace=self.ws, media_type='Video').count(), 1)
