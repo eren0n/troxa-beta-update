@@ -190,6 +190,14 @@ def fetch_page_ads(page_id, country='US'):
                     if stale >= 3:
                         break
                 page_text = page.inner_text('body')
+                # The Ad Library writes the page's name into its search box —
+                # the only place it appears when the page shows no ads.
+                header_name = ''
+                for box in page.locator('input[type="search"], input[placeholder*="Search"]').all():
+                    try:
+                        header_name = header_name or box.input_value().strip()
+                    except Exception:
+                        pass
             finally:
                 browser.close()
     except PlaywrightError as exc:
@@ -200,7 +208,7 @@ def fetch_page_ads(page_id, country='US'):
     result.ads = [normalise(i + 1, raw) for i, raw in enumerate(
         a for a in found.values() if str(a.get('page_id') or '') in ('', str(page_id))
     )]
-    result.page_name = next((a['page_name'] for a in result.ads if a['page_name']), '')
+    result.page_name = next((a['page_name'] for a in result.ads if a['page_name']), '') or header_name
 
     if result.site_count is None and not result.ads:
         # Neither a result count nor any ads: a login wall, a block, or a

@@ -68,8 +68,15 @@ function Segmented({ options, value, onChange }) {
   );
 }
 
+// A read that worked but found nothing. Logged out — as we read — the Ad
+// Library shows the same empty page for a page with no running ads and for a
+// page whose ads are age-restricted (Meta shows those only to logged-in
+// users), so the card says both and points to the Ad Library to check.
+const showsNoAds = (c) => !c.syncing && !!c.last_synced_at && !c.last_error && !c.total_ads;
+
 function CompetitorCard({ c, selected, onSelect, isEditor, onSync, onRemove }) {
   const [confirming, setConfirming] = useState(false);
+  const countryName = c.country === 'ALL' ? 'any country' : c.country;
   return (
     <div
       onClick={onSelect}
@@ -99,6 +106,22 @@ function CompetitorCard({ c, selected, onSelect, isEditor, onSync, onRemove }) {
       <p className="text-[11px] text-slate-600 mt-1">
         {c.syncing && !c.last_synced_at ? 'First read in progress…' : `Updated ${timeAgo(c.last_synced_at)}`}
       </p>
+
+      {showsNoAds(c) && (
+        <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-2.5" onClick={(e) => e.stopPropagation()}>
+          <p className="flex items-center gap-1.5 text-[11px] font-black text-amber-300">
+            <AlertTriangle className="w-3 h-3 shrink-0" /> No ads visible
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+            Either this page isn't running ads in {countryName}, or its ads are age-restricted —
+            Meta shows those only to people logged in to Facebook, so they can't be followed here.
+          </p>
+          <a href={c.ad_library_url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-black text-amber-300 hover:text-amber-200">
+            Check in the Ad Library <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
 
       <div className="flex items-center gap-1 mt-3" onClick={(e) => e.stopPropagation()}>
         <a href={c.ad_library_url} target="_blank" rel="noopener noreferrer" title="Open in Ad Library"
