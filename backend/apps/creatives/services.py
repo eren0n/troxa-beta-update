@@ -1643,7 +1643,11 @@ def _give_video_its_own_creative(vjob):
         thumbnail_url=sc.thumbnail_url,
         media_type='Video',
         aspect_ratio=sc.aspect_ratio,
-        source=sc.source,
+        # The video is Troxa's output even when the static was an upload or a
+        # Brand Kit reference — the gallery lists generated work by default,
+        # and a video marked "uploaded"/reference was invisible there.
+        source='troxa_generated',
+        is_reference=False,
         created_by=vjob.created_by or sc.created_by,
         caption_status='done',
     )

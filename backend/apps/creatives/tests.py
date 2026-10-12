@@ -169,3 +169,51 @@ class VideoKeepsItsStaticTests(TestCase):
         photos = GeneratedCreative.objects.filter(workspace=self.ws, media_type='Photo')
         self.assertEqual([p.name for p in photos], ['WS_S_1x1_001'])
         self.assertEqual(GeneratedCreative.objects.filter(workspace=self.ws, media_type='Video').count(), 1)
+
+
+class VideoFromBrandKitReferenceTests(VideoKeepsItsStaticTests):
+    """The reported case: a video made from an uploaded Brand Kit reference."""
+
+    def setUp(self):
+        super().setUp()
+        type(self.static).objects.filter(pk=self.static.pk).update(source='uploaded', is_reference=True)
+        self.static.refresh_from_db()
+
+    def test_the_reference_stays_in_brand_kit_and_the_video_shows_in_the_gallery(self):
+        self.finish({'video': {'url': 'https://fal/clip.mp4'}})
+        self.static.refresh_from_db()
+        self.assertEqual((self.static.media_type, self.static.is_reference, self.static.source),
+                         ('Photo', True, 'uploaded'))
+        self.vjob.refresh_from_db()
+        video = self.vjob.source_creative
+        self.assertEqual((video.media_type, video.is_reference, video.source),
+                         ('Video', False, 'troxa_generated'))   # the gallery lists troxa_generated
+
+    def convert_the_old_way(self):
+        type(self.static).objects.filter(pk=self.static.pk).update(media_type='Video', name='WS_V_1x1_001')
+
+    def test_an_old_conversion_is_split_back_into_reference_and_video(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import GeneratedCreative
+        self.convert_the_old_way()
+        call_command('restore_video_statics', stdout=StringIO())
+        ref = GeneratedCreative.objects.get(workspace=self.ws, media_type='Photo')
+        video = GeneratedCreative.objects.get(workspace=self.ws, media_type='Video')
+        self.assertEqual((ref.is_reference, ref.source), (True, 'uploaded'))
+        self.assertEqual((video.is_reference, video.source), (False, 'troxa_generated'))
+
+    def test_a_static_restored_without_its_flags_is_repaired(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import GeneratedCreative
+        self.convert_the_old_way()
+        # what the first version of the command left behind on live
+        GeneratedCreative.objects.create(workspace=self.ws, name='WS_S_1x1_001', media_type='Photo',
+                                         image_url='https://cdn/static.png', source='uploaded')
+        call_command('restore_video_statics', stdout=StringIO())
+        call_command('restore_video_statics', stdout=StringIO())
+        photos = GeneratedCreative.objects.filter(workspace=self.ws, media_type='Photo')
+        self.assertEqual([(p.is_reference, p.source) for p in photos], [(True, 'uploaded')])
+        video = GeneratedCreative.objects.get(workspace=self.ws, media_type='Video')
+        self.assertEqual((video.is_reference, video.source), (False, 'troxa_generated'))
