@@ -239,7 +239,10 @@ export default function GenerateCreatives() {
 
   const costPerImg = (MODELS.find(m => m.name === s.selectedModel)?.credits ?? 1);
   const totalNeeded = Math.max(s.selectedStatics.length, 1) * s.numImages * s.ratios.length * costPerImg;
-  const creditBalance = credits?.balance ?? 0;
+  // A null balance is an unlimited plan, not an empty one: reading it as 0
+  // locked Generate for every unlimited workspace.
+  const unlimitedCredits = !!credits && credits.balance === null;
+  const creditBalance = unlimitedCredits ? Infinity : (credits?.balance ?? 0);
 
   if (activeJobs.length > 0 && !showForm) {
     return (
@@ -348,7 +351,7 @@ export default function GenerateCreatives() {
         </div>
         <div className="flex items-center gap-2 ml-12 md:ml-0">
           <span className="px-3 py-1.5 bg-white/4 border border-white/6 rounded-lg text-[10px] font-black text-slate-500 uppercase tracking-widest">
-            {creditBalance} Credits Left
+            {unlimitedCredits ? 'Unlimited Credits' : `${creditBalance} Credits Left`}
           </span>
           <UploadCreativeButton onUploaded={handleCreativeUploaded} label="Upload" />
         </div>

@@ -163,14 +163,15 @@ export default function Profile() {
 
   const planName = (typeof credits?.plan === 'string' ? credits.plan : credits?.plan?.name) || 'Free Trial';
   const planTier = credits?.plan_tier || credits?.plan?.tier || 'free';
+  const unlimitedCredits = !!credits && credits.balance === null;   // null = unlimited plan
   const creditBalance = credits?.balance ?? 0;
   const creditUsed = credits?.used ?? 0;
   const creditTotal = creditBalance + creditUsed;
-  const creditPct = creditTotal > 0 ? Math.round((creditUsed / creditTotal) * 100) : 0;
+  const creditPct = !unlimitedCredits && creditTotal > 0 ? Math.round((creditUsed / creditTotal) * 100) : 0;
 
   const stats = [
     { label: 'Creatives Made', value: creditUsed.toLocaleString(), Icon: Sparkles, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
-    { label: 'Credits Left', value: creditBalance.toLocaleString(), Icon: CreditCard, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+    { label: 'Credits Left', value: unlimitedCredits ? 'Unlimited' : creditBalance.toLocaleString(), Icon: CreditCard, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
     { label: 'Plan', value: planName, Icon: Trophy, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
     { label: 'Member Since', value: user?.date_joined ? new Date(user.date_joined).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—', Icon: Calendar, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
   ];
@@ -502,7 +503,7 @@ export default function Profile() {
                   style={creditPct > 80 ? undefined : { background: 'linear-gradient(to right, var(--accent-hover), var(--accent))' }}
                 />
               </div>
-              <p className="text-[10px] text-gray-500 mt-2">{creditBalance} credits remaining</p>
+              <p className="text-[10px] text-gray-500 mt-2">{unlimitedCredits ? 'Unlimited credits' : `${creditBalance} credits remaining`}</p>
             </div>
             <div className="pt-2">
               <Link

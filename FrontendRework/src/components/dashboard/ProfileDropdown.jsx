@@ -38,6 +38,7 @@ export const ProfileDropdown = ({ variant = 'header', collapsed = false }) => {
   const avatarUrl = user?.avatar_url;
   const planName  = (typeof credits?.plan === 'string' ? credits.plan : credits?.plan?.name) || 'Free Trial';
   const planTier  = credits?.plan_tier || credits?.plan?.tier || 'free';
+  const unlimited = !!credits && credits.balance === null;   // null = unlimited plan
   const balance   = credits?.balance ?? 0;
 
   const TIER_BADGE = {
@@ -137,13 +138,13 @@ export const ProfileDropdown = ({ variant = 'header', collapsed = false }) => {
               <div className="mt-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">Credits</span>
-                  <span className="text-[10px] font-black text-white">{balance.toLocaleString()}</span>
+                  <span className="text-[10px] font-black text-white">{unlimited ? 'Unlimited' : balance.toLocaleString()}</span>
                 </div>
                 <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
-                      width: `${credits ? Math.min(100, (balance / (credits.total || balance || 1)) * 100) : 0}%`,
+                      width: `${unlimited ? 100 : credits ? Math.min(100, (balance / (credits.total || balance || 1)) * 100) : 0}%`,
                       background: 'linear-gradient(to right, var(--accent-hover), var(--accent))',
                     }}
                   />

@@ -572,6 +572,7 @@ function CreditRing({ pct, low }) {
 }
 
 function WorkspaceCard({ members, credits, workspace }) {
+  const unlimited = !!credits && credits.balance === null;   // null = unlimited plan
   const balance = credits?.balance ?? 0;
   const total = credits?.total ?? 0;
   const pct = total > 0 ? Math.min(100, Math.round((balance / total) * 100)) : null;
@@ -597,7 +598,7 @@ function WorkspaceCard({ members, credits, workspace }) {
         <div className="relative">
           <CreditRing pct={pct} low={low} />
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <p className="text-xl font-black text-white leading-none">{balance.toLocaleString()}</p>
+            <p className="text-xl font-black text-white leading-none">{unlimited ? '∞' : balance.toLocaleString()}</p>
             <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">credits</p>
           </div>
         </div>
